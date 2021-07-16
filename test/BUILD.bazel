@@ -1,0 +1,3 @@
+load("@okapi//bzl:generate.bzl", "generate")
+
+generate()

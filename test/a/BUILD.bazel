@@ -1,0 +1,46 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
+
+ocaml_module(
+    name = "a2",
+    sig = ":a2_sig",
+    struct = ":a2.ml",
+    deps = [":f1"],
+)
+
+ocaml_signature(
+    name = "a2_sig",
+    src = ":a2.mli",
+    deps = [":f1"],
+)
+
+ocaml_module(
+    name = "f1",
+    sig = ":f1_sig",
+    struct = ":f1.ml",
+    deps = [],
+)
+
+ocaml_signature(
+    name = "f1_sig",
+    src = ":f1.mli",
+    deps = [],
+)
+
+ocaml_module(
+    name = "a3",
+    struct = ":a3.ml",
+    deps = [
+        ":a2",
+        ":f1",
+    ],
+)
+
+ocaml_ns_library(
+    name = "#A",
+    submodules = [
+        ":a3",
+        ":a2",
+        ":f1",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,10 @@
+/bazel-bin
+/bazel-okapi
+/bazel-out
+/bazel-testlogs
+/bazel
+/test/bazel-bin
+/test/bazel-out
+/test/bazel-test
+/test/bazel-testlogs
+/test/bazel

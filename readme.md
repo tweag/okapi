@@ -19,7 +19,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 http_archive(
     name = "okapi",
     strip_prefix = "okapi-<commit>",
-    urls = ["https://github.com/tek/rules_okapi/archive/<commit>.tar.gz"],
+    urls = ["https://github.com/tweag/okapi/archive/<commit>.tar.gz"],
     sha256 = "<sha>",
 )
 

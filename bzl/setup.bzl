@@ -12,4 +12,4 @@ def okapi_setup():
     )
     nixpkgs_go_configure(repository = "@nixpkgs")
     go_rules_dependencies()
-    gazelle_dependencies()
+    gazelle_dependencies(go_repository_default_config = "@//:WORKSPACE.bazel")

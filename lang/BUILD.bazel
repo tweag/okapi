@@ -4,6 +4,8 @@ go_library(
     name = "lang",
     srcs = [
         "lang.go",
+        "deps.go",
+        "rules.go",
     ],
     importpath = "github.com/tweag/okapi/lang",
     visibility = ["//visibility:public"],

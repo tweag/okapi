@@ -17,7 +17,7 @@ import (
 
 const okapiName = "okapi"
 
-type okapiLang struct{}
+type okapiLang struct {}
 
 func NewLanguage() language.Language { return &okapiLang{} }
 
@@ -27,12 +27,9 @@ func (*okapiLang) RegisterFlags(fs *flag.FlagSet, cmd string, c *config.Config) 
 
 func (*okapiLang) CheckFlags(fs *flag.FlagSet, c *config.Config) error { return nil }
 
-func (*okapiLang) KnownDirectives() []string {
-  return []string{}
-}
+func (*okapiLang) KnownDirectives() []string { return []string{} }
 
-type Config struct {
-}
+type Config struct { }
 
 func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {
   if f == nil {
@@ -51,12 +48,22 @@ func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {
   c.Exts[okapiName] = extraConfig
 }
 
-func (*okapiLang) Kinds() map[string]rule.KindInfo {
-  return kinds
+var defaultKind = rule.KindInfo {
+  MatchAttrs: []string{},
+  NonEmptyAttrs: map[string]bool{},
+  MergeableAttrs: map[string]bool{
+    "deps": true,
+    "deps_opam": true,
+  },
 }
 
-var kinds = map[string]rule.KindInfo{
+var kinds = map[string]rule.KindInfo {
+  "ocaml_module": defaultKind,
+  "ocaml_signature": defaultKind,
+  "ocaml_ns_library": defaultKind,
 }
+
+func (*okapiLang) Kinds() map[string]rule.KindInfo { return kinds }
 
 func (*okapiLang) Loads() []rule.LoadInfo {
   return []rule.LoadInfo{
@@ -78,12 +85,8 @@ func (*okapiLang) Embeds(r *rule.Rule, from label.Label) []label.Label { return 
 func (*okapiLang) Resolve(c *config.Config, ix *resolve.RuleIndex, rc *repo.RemoteCache, r *rule.Rule, imports interface{}, from label.Label) {
 }
 
-type Import struct {
-
-}
-
 var emptyResult = language.GenerateResult{
-  Gen:     []*rule.Rule{},
+  Gen: []*rule.Rule{},
   Imports: []interface{}{},
 }
 
@@ -103,16 +106,6 @@ type Codept struct {
   Local []CodeptLocal
 }
 
-type SourceFile interface {
-  name() string
-  extension() string
-  targetName() string
-  rule(deps []Source) *rule.Rule
-  isInterface() bool
-  srcAttr() string
-  libraryDep() []string
-}
-
 type Source struct {
   Name string
   Intf bool
@@ -126,21 +119,23 @@ func targetNames(deps []string) []string {
   return result
 }
 
-func sigTarget(src Source) string {
-  return src.Name + "_sig"
+func sigTarget(src Source) string { return src.Name + "_sig" }
+
+func genRule(kind string, name string, deps []string) *rule.Rule {
+  r := rule.NewRule(kind, name)
+  if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
+  return r
 }
 
 func moduleRule(src Source, deps []string) *rule.Rule {
-  r := rule.NewRule("ocaml_module", src.Name)
-  r.SetAttr("deps", targetNames(deps))
+  r := genRule("ocaml_module", src.Name, deps)
   r.SetAttr("struct", ":" + src.Name + ".ml")
   if src.Intf { r.SetAttr("sig", ":" + sigTarget(src)) }
   return r
 }
 
 func signatureRule(src Source, deps []string) *rule.Rule {
-  r := rule.NewRule("ocaml_signature", sigTarget(src))
-  r.SetAttr("deps", targetNames(deps))
+  r := genRule("ocaml_signature", sigTarget(src), deps)
   r.SetAttr("src", ":" + src.Name + ".mli")
   return r
 }

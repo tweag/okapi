@@ -83,7 +83,7 @@ func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateRes
   for _, file := range args.RegularFiles {
     ext := filepath.Ext(file)
     if ext == ".ml" || ext == ".mli" {
-      return LibraryRules(Dependencies(args))
+      return LibraryRules(Dependencies(args.Dir))
     }
   }
   return emptyResult

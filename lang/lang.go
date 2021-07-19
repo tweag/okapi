@@ -40,10 +40,6 @@ func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {
 var defaultKind = rule.KindInfo {
   MatchAttrs: []string{},
   NonEmptyAttrs: map[string]bool{},
-  MergeableAttrs: map[string]bool{
-    "deps": true,
-    "deps_opam": true,
-  },
 }
 
 var kinds = map[string]rule.KindInfo {

@@ -13,7 +13,7 @@ ocaml_signature(
 
 ocaml_module(
     name = "a3",
-    deps_opam = ["angstrom"],  # keep
+    deps_opam = ["angstrom"],
     struct = ":a3.ml",
     deps = [
         ":a2",

@@ -1,0 +1,44 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
+)
+
+ocaml_ns_library(
+    name = "#Sub_lib",
+    submodules = ["sub"],
+    visibility = ["//visibility:public"],
+)
+
+ocaml_module(
+    name = "foo",
+    deps_opam = [],
+    opts = [],
+    struct = ":foo.ml",
+)
+
+ocaml_module(
+    name = "bar",
+    deps_opam = [],
+    opts = [],
+    struct = ":bar.ml",
+)
+
+ocaml_ns_library(
+    name = "#Sub_extra_lib",
+    submodules = [
+        "foo",
+        "bar",
+    ],
+    visibility = ["//visibility:public"],
+)

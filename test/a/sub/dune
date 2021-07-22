@@ -1,0 +1,10 @@
+(library
+ (name sub_lib)
+ (public_name sub-lib)
+ (flags (:standard -open Angstrom))
+ (libraries angstrom re ipaddr))
+
+(library
+ (name sub_extra_lib)
+ (public_name sub-extra-lib)
+ (modules foo bar))

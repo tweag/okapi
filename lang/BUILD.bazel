@@ -2,11 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "lang",
-    srcs = [
-        "lang.go",
-        "deps.go",
-        "rules.go",
-    ],
+    srcs = ["lang.go"],
     importpath = "github.com/tweag/okapi/lang",
     visibility = ["//visibility:public"],
     deps = [

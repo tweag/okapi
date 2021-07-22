@@ -1,19 +1,10 @@
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_module(
-    name = "f1",
-    sig = ":f1_sig",
-    struct = ":f1.ml",
-)
-
-ocaml_signature(
-    name = "f1_sig",
-    src = ":f1.mli",
-)
-
-ocaml_module(
     name = "a3",
-    deps_opam = ["angstrom"],
+    deps_opam = [
+        "angstrom",
+    ],
     struct = ":a3.ml",
     deps = [
         ":a2",
@@ -34,12 +25,30 @@ ocaml_signature(
     deps = [":f1"],
 )
 
+ocaml_module(
+    name = "f1",
+    sig = ":f1_sig",
+    struct = ":f1.ml",
+)
+
+ocaml_signature(
+    name = "f1_sig",
+    src = ":f1.mli",
+)
+
 ocaml_ns_library(
     name = "#A",
     submodules = [
-        ":a3",
         ":a2",
         ":f1",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ocaml_ns_library(
+    name = "#B",
+    submodules = [
+        ":a3",
     ],
     visibility = ["//visibility:public"],
 )

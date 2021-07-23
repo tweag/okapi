@@ -267,6 +267,8 @@ type DuneLib struct {
   Modules []string
   Flags []string
   Libraries []DuneLibDep
+  Auto bool
+  Wrapped bool
 }
 
 func DuneList(name string, attr string, dune SexpMap) []string {
@@ -274,7 +276,9 @@ func DuneList(name string, attr string, dune SexpMap) []string {
   raw := dune.Values[attr]
   if raw != nil {
     items, err := sexpStrings(raw)
-    if err != nil { log.Fatalf("dune library %s: attr " + attr + " is not a list: %#v", name, raw) }
+    if err != nil { log.Fatalf("dune library %s: attr " + attr + " is not a list of strings: %#v", name, raw) }
+    // TODO this is an exclude directive
+    // if item[:2] == []string{":standard", "\\"}
     for _, item := range items {
       if item[:1] != ":" {
         result = append(result, item)
@@ -325,11 +329,15 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
       if dune.Name == "library" {
         name, nameIsString := dune.Values["name"].(SexpString)
         if !nameIsString { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
+        wrapped := dune.Values["wrapped"] != SexpString{"false"}
+        modules := DuneList(libName, "modules", dune)
         lib := DuneLib{
           Name: name.Content,
-          Modules: DuneList(libName, "modules", dune),
+          Modules: modules,
           Flags: DuneList(libName, "flags", dune),
           Libraries: duneLibraryDeps(libName, dune),
+          Auto: len(modules) == 0,
+          Wrapped: wrapped,
         }
         libraries = append(libraries, lib)
       }
@@ -421,15 +429,16 @@ func libraryDeps(sources Deps) []string {
   return deps
 }
 
-func libraryRuleFor(name string, modules []string) *rule.Rule {
+func libraryRuleFor(name string, modules []string, auto bool) *rule.Rule {
   r := rule.NewRule("ocaml_ns_library", name)
   r.SetAttr("visibility", []string{"//visibility:public"})
   r.SetAttr("submodules", modules)
+  if auto { r.AddComment("# okapi:auto") }
   return r
 }
 
 func libraryRule(name string, sources Deps) *rule.Rule {
-  return libraryRuleFor(name, libraryDeps(sources))
+  return libraryRuleFor(name, libraryDeps(sources), false)
 }
 
 func resultForRules(rules []*rule.Rule) language.GenerateResult {
@@ -442,13 +451,35 @@ func resultForRules(rules []*rule.Rule) language.GenerateResult {
   }
 }
 
-func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
+func sigModRules(src Source, deps []string) []*rule.Rule {
+  var rules []*rule.Rule
+  rules = append(rules, moduleRule(src, deps))
+  if src.Intf { rules = append(rules, signatureRule(src, deps)) }
+  return rules
+}
+
+func sourceRules(names []string, sources Deps) []*rule.Rule {
+  var rules []*rule.Rule
+  for _, name := range names {
+    for src, deps := range sources {
+      if src.Name == name[1:] {
+        rules = append(rules, sigModRules(src, deps)...)
+      }
+    }
+  }
+  return rules
+}
+
+func sourceRulesAuto(sources Deps) []*rule.Rule {
   var rules []*rule.Rule
   for src, deps := range sources {
-    rules = append(rules, moduleRule(src, deps))
-    if src.Intf { rules = append(rules, signatureRule(src, deps)) }
+    rules = append(rules, sigModRules(src, deps)...)
   }
-  return append(rules, libraryRule(name, sources))
+  return rules
+}
+
+func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
+  return append(sourceRulesAuto(sources), libraryRule(name, sources))
 }
 
 func duneLib(sources Deps, dune DuneLib) []*rule.Rule {
@@ -463,7 +494,7 @@ func duneLib(sources Deps, dune DuneLib) []*rule.Rule {
     rules = append(rules, duneAttrs(moduleRule(src, deps), dune))
     if src.Intf { rules = append(rules, duneAttrs(signatureRule(src, deps), dune)) }
   }
-  return append(rules, libraryRuleFor(generateLibraryName(dune.Name), modules))
+  return append(rules, libraryRuleFor(generateLibraryName(dune.Name), modules, dune.Auto))
 }
 
 func singleDuneLib(sources Deps, dune DuneLib) []*rule.Rule {
@@ -521,35 +552,66 @@ func GenerateRules(name string, sources Deps, dune string) []*rule.Rule {
   if dune == "" { return GenerateRulesAuto(name, sources) } else { return GenerateRulesDune(name, sources, dune) }
 }
 
-func sourceRules(names []string, sources Deps) []*rule.Rule {
-  var rules []*rule.Rule
-  for _, name := range names {
-    for src, deps := range sources {
-      if src.Name == name[1:] {
-        rules = append(rules, moduleRule(src, deps))
-        if src.Intf { rules = append(rules, signatureRule(src, deps)) }
-      }
-    }
-  }
-  return rules
-}
-
 var EmptyResult = language.GenerateResult{
   Gen: []*rule.Rule{},
   Empty: []*rule.Rule{},
   Imports: []interface{}{},
 }
 
-// Update an existing build that has been manually amended by the user to contain more than one library.
-// In that case, all submodule assignments are static, and only the module/signature rules are updated.
-// TODO allow the user to mark one of the libraries as `auto`, causing new files to be added to it.
-func Multilib(libs []*rule.Rule, sources Deps) []*rule.Rule {
+func tags(r *rule.Rule) []string {
+  var tags []string
+  rex := regexp.MustCompile(`^# okapi:(\S+)`)
+  for _, c := range r.Comments() {
+    match := rex.FindStringSubmatch(c)
+    if len(match) == 1 { tags = append(tags, match[0]) }
+  }
+  return tags
+}
+
+func findAutoLib(libs []*rule.Rule) (*rule.Rule, []*rule.Rule) {
+  var auto *rule.Rule
+  var nonAuto []*rule.Rule
+  for _, lib := range libs {
+    if contains("auto", tags(lib)) { auto = lib } else { nonAuto = append(nonAuto, lib) }
+  }
+  return auto, nonAuto
+}
+
+func multilibWithoutAuto(libs []*rule.Rule, sources Deps) []*rule.Rule {
   var rules []*rule.Rule
   for _, r := range libs {
     sub := r.AttrStrings("submodules")
     rules = append(rules, sourceRules(sub, sources)...)
   }
   return rules
+}
+
+func multilibWithAuto(auto *rule.Rule, nonAuto []*rule.Rule, sources Deps) []*rule.Rule {
+  var rules []*rule.Rule
+  var nonAutoModules map[string]bool
+  for _, r := range nonAuto {
+    sub := r.AttrStrings("submodules")
+    rules = append(rules, sourceRules(sub, sources)...)
+    for _, mod := range sub {
+      nonAutoModules[mod[1:]] = true
+    }
+  }
+  var autoSources Deps
+  for src, deps := range sources {
+    if !nonAutoModules[src.Name] { autoSources[src] = deps }
+  }
+  return append(rules, sourceRulesAuto(autoSources)...)
+}
+
+// Update an existing build that has been manually amended by the user to contain more than one library.
+// In that case, all submodule assignments are static, and only the module/signature rules are updated.
+func Multilib(libs []*rule.Rule, sources Deps) []*rule.Rule {
+  auto, nonAuto := findAutoLib(libs)
+  if auto == nil {
+    return multilibWithoutAuto(libs, sources)
+  } else {
+    return multilibWithAuto(auto, nonAuto, sources)
+  }
 }
 
 func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []*rule.Rule {

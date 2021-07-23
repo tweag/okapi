@@ -1,6 +1,20 @@
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
 
 ocaml_module(
+    name = "final",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":final.ml",
+)
+
+ocaml_module(
     name = "sub",
     deps_opam = [
         "angstrom",
@@ -16,7 +30,10 @@ ocaml_module(
 
 ocaml_ns_library(
     name = "#Sub_lib",
-    submodules = ["sub"],
+    submodules = [
+        "final",
+        "sub",
+    ],
     visibility = ["//visibility:public"],
 )
 

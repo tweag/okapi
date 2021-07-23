@@ -103,7 +103,7 @@ func Dependencies(dir string, files []string) Deps {
 }
 
 // -----------------------------------------------------------------------------
-// Dune
+// Sexp
 // -----------------------------------------------------------------------------
 
 type SexpError struct { msg string }
@@ -165,7 +165,7 @@ func sexpStrings(node SexpNode) ([]string, error) {
   return result, nil
 }
 
-func sexpGroup(elements []SexpNode) SexpNode {
+func sexpMap(elements []SexpNode) SexpNode {
   if len(elements) > 2 {
     canMap := false
     smap := make(map[string]SexpNode)
@@ -195,14 +195,14 @@ func sexp(tokens []string) (SexpNode, []string) {
     tail := tokens[1:]
     if head == "(" {
       sub, rest := sexpList(tail)
-      return sub, rest
+      return SexpList{sub}, rest
     } else if head == ")" {
       return SexpEmpty {}, tail
     } else { return SexpString{head}, tail }
   } else { return SexpEmpty{}, []string{} }
 }
 
-func sexpList(tokens []string) (SexpNode, []string) {
+func sexpList(tokens []string) ([]SexpNode, []string) {
   done := false
   cur := tokens
   var result []SexpNode
@@ -218,8 +218,12 @@ func sexpList(tokens []string) (SexpNode, []string) {
       }
     } else { done = true }
   }
-  return sexpGroup(result), cur
+  return result, cur
 }
+
+// -----------------------------------------------------------------------------
+// Dune
+// -----------------------------------------------------------------------------
 
 func parseDune(duneFile string) SexpList {
   bytes, _ := ioutil.ReadFile(duneFile)
@@ -234,18 +238,35 @@ func parseDune(duneFile string) SexpList {
       tokens = append(tokens, match)
     }
   }
-  result, rest := sexpList(tokens)
+  items, rest := sexpList(tokens)
   if len(rest) > 0 { log.Fatalf("leftover tokens after parsing sexps: %#v", rest) }
-  list, isList := result.(SexpList)
-  if !isList { log.Fatalf("dune parsing didn't produce a list: %#v'", result) }
-  return list
+  var result []SexpNode
+  for _, node := range items {
+    l, isList := node.(SexpList)
+    if isList { result = append(result, sexpMap(l.Sub)) } else {
+      log.Fatalf("top level dune item is not a list: %#v", node)
+    }
+  }
+  return SexpList{result}
+}
+
+type DuneAlt struct {
+  Cond string
+  Choice string
+}
+
+type DuneLibDep interface {}
+type DuneLibOpam struct { Name string }
+type DuneLibSelect struct {
+  Out string
+  Alts []DuneAlt
 }
 
 type DuneLib struct {
   Name string
   Modules []string
   Flags []string
-  Libraries []string
+  Libraries []DuneLibDep
 }
 
 func DuneList(name string, attr string, dune SexpMap) []string {
@@ -263,8 +284,8 @@ func DuneList(name string, attr string, dune SexpMap) []string {
   return result
 }
 
-func duneLibraryDeps(libName string, dune SexpMap) []string {
-  var mods []string
+func duneLibraryDeps(libName string, dune SexpMap) []DuneLibDep {
+  var deps []DuneLibDep
   raw := dune.Values["libraries"]
   selectString := SexpString{"select"}
   if raw != nil {
@@ -273,25 +294,27 @@ func duneLibraryDeps(libName string, dune SexpMap) []string {
     for _, entry := range entries {
       s, err := entry.String()
       if err == nil {
-        mods = append(mods, s)
+        deps = append(deps, DuneLibOpam{s})
       } else {
         sel, err := entry.List()
         if err != nil { log.Fatalf("library %s: unparsable libraries entry: %#v; %s", libName, sel, err) }
         if len(sel) > 3 && sel[0] == selectString {
+          var alts []DuneAlt
           for _, alt := range sel[3:] {
             ss, err := sexpStrings(alt)
-            if err != nil || len(ss) < 2 {
+            if err == nil && len(ss) == 2 && ss[0] == "->" { alts = append(alts, DuneAlt{"", ss[1]}) } else
+            if err == nil && len(ss) == 3 && ss[1] == "->" { alts = append(alts, DuneAlt{ss[0], ss[2]}) } else {
               log.Fatalf("library %s: unparsable select alternative: %#v; %s", libName, alt, err)
             }
-            if ss[0] == "->" {
-              mods = append(mods, ss[1])
-            }
           }
+          final, err := sel[1].String()
+          if err != nil { log.Fatalf("library %s: invalid type for select file name: %#v; %s", libName, sel, err) }
+          deps = append(deps, DuneLibSelect{final, alts})
         }
       }
     }
   }
-  return mods
+  return deps
 }
 
 func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
@@ -315,8 +338,42 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
   return libraries
 }
 
+func contains(target string, items []string) bool {
+  for _, item := range items {
+    if target == item {return true}
+  }
+  return false
+}
+
+func filterSelects(modules []string, libs []DuneLibDep) []string {
+  var result []string
+  var alts []string
+  for _, lib := range libs {
+    sel, isSel := lib.(DuneLibSelect)
+    if isSel {
+      result = append(result, depName(sel.Out))
+      for _, alt := range sel.Alts {
+        alts = append(alts, depName(alt.Choice))
+      }
+    }
+  }
+  for _, lib := range modules {
+    if !contains(lib, alts) { result = append(result, lib) }
+  }
+  return result
+}
+
+func opamDeps(deps []DuneLibDep) []string {
+  var result []string
+  for _, dep := range deps {
+    ld, isOpam := dep.(DuneLibOpam)
+    if isOpam { result = append(result, ld.Name) }
+  }
+  return result
+}
+
 func duneAttrs(rule *rule.Rule, dune DuneLib) *rule.Rule {
-  rule.SetAttr("deps_opam", dune.Libraries)
+  rule.SetAttr("deps_opam", opamDeps(dune.Libraries))
   rule.SetAttr("opts", dune.Flags)
   return rule
 }
@@ -398,13 +455,15 @@ func duneLib(sources Deps, dune DuneLib) []*rule.Rule {
   byName := make(map[string]Source)
   for src := range sources { byName[src.Name] = src }
   var rules []*rule.Rule
-  for _, name := range dune.Modules {
-    src := byName[name]
+  modules := filterSelects(dune.Modules, dune.Libraries)
+  for _, name := range modules {
+    src, srcExists := byName[name]
+    if !srcExists { src = Source{name, false} }
     deps := sources[src]
     rules = append(rules, duneAttrs(moduleRule(src, deps), dune))
     if src.Intf { rules = append(rules, duneAttrs(signatureRule(src, deps), dune)) }
   }
-  return append(rules, libraryRuleFor(generateLibraryName(dune.Name), dune.Modules))
+  return append(rules, libraryRuleFor(generateLibraryName(dune.Name), modules))
 }
 
 func singleDuneLib(sources Deps, dune DuneLib) []*rule.Rule {
@@ -458,10 +517,8 @@ func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule 
   }
 }
 
-func GenerateRules(name string, sources Deps, dune string) language.GenerateResult {
-  var rules []*rule.Rule
-  if dune == "" { rules = GenerateRulesAuto(name, sources) } else { rules = GenerateRulesDune(name, sources, dune) }
-  return resultForRules(rules)
+func GenerateRules(name string, sources Deps, dune string) []*rule.Rule {
+  if dune == "" { return GenerateRulesAuto(name, sources) } else { return GenerateRulesDune(name, sources, dune) }
 }
 
 func sourceRules(names []string, sources Deps) []*rule.Rule {
@@ -486,32 +543,26 @@ var EmptyResult = language.GenerateResult{
 // Update an existing build that has been manually amended by the user to contain more than one library.
 // In that case, all submodule assignments are static, and only the module/signature rules are updated.
 // TODO allow the user to mark one of the libraries as `auto`, causing new files to be added to it.
-func Multilib(libs []*rule.Rule, sources Deps) language.GenerateResult {
+func Multilib(libs []*rule.Rule, sources Deps) []*rule.Rule {
   var rules []*rule.Rule
-  var imports []interface{}
   for _, r := range libs {
     sub := r.AttrStrings("submodules")
     rules = append(rules, sourceRules(sub, sources)...)
   }
-  for range rules { imports = append(imports, 0) }
-  return language.GenerateResult{
-    Gen: rules,
-    Empty: []*rule.Rule{},
-    Imports: imports,
-  }
+  return rules
 }
 
-func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) language.GenerateResult {
+func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []*rule.Rule {
   var libs []*rule.Rule
   for _, r := range rules {
     if r.Kind() == "ocaml_ns_library" { libs = append(libs, r) }
   }
   if len(libs) == 1 {
-    return GenerateRules(libs[0].Name(), sources, "")
+    return GenerateRulesAuto(libs[0].Name(), sources)
   } else if len(libs) > 1 {
     return Multilib(libs, sources)
   } else {
-    return EmptyResult
+    return nil
   }
 }
 
@@ -599,18 +650,26 @@ func findDune(dir string, files []string) string {
 }
 
 func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateResult {
+  var rules []*rule.Rule
+  var imports []interface{}
   if args.File != nil && args.File.Rules != nil && containsLibrary(args.File.Rules) {
-    return AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles))
-  }
-  for _, file := range args.RegularFiles {
-    ext := filepath.Ext(file)
-    if ext == ".ml" || ext == ".mli" {
-      return GenerateRules(
-        generateLibraryName(args.Dir),
-        Dependencies(args.Dir, args.RegularFiles),
-        findDune(args.Dir, args.RegularFiles),
-      )
+    rules = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles))
+  } else {
+    for _, file := range args.RegularFiles {
+      ext := filepath.Ext(file)
+      if ext == ".ml" || ext == ".mli" {
+        rules = GenerateRules(
+          generateLibraryName(args.Dir),
+          Dependencies(args.Dir, args.RegularFiles),
+          findDune(args.Dir, args.RegularFiles),
+        )
+      }
     }
   }
-  return EmptyResult
+  for range rules { imports = append(imports, 0) }
+  return language.GenerateResult{
+    Gen: rules,
+    Empty: []*rule.Rule{},
+    Imports: imports,
+  }
 }

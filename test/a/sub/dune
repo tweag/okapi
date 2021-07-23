@@ -2,7 +2,14 @@
  (name sub_lib)
  (public_name sub-lib)
  (flags (:standard -open Angstrom))
- (libraries angstrom re ipaddr))
+ (libraries
+   angstrom
+   re
+   ipaddr
+   (select final.ml from
+     (angstrom -> choice1.ml)
+     (-> choice2.ml))
+  ))
 
 (library
  (name sub_extra_lib)

@@ -137,6 +137,33 @@ ocaml_ns_library(
 )
 ```
 
+# Dune Conversion
+
+If a source directory has no Bazel config, but there is a `dune` file present, the Dune configuration will be used to
+populate the attributes `opts` (from `flags`) and `deps_opam` (from `libraries`).
+
+`select` directives are parsed in order to find the correct module file names for the library, but the selection of the
+correct source file has to be done manually, since there is no (easy) way to check for the presence of dependencies.
+
+# Multilib Builds
+
+If a build file defines more than one library, as is also possible with Dune, the generator cannot decide which library
+should become the owner of a newly added module when updating.
+
+The user may therefore mark one of the libraries as the one that owns all new files by placing a comment right before
+the library target:
+
+```bzl
+# okapi:auto
+ocaml_ns_library(
+    name = "#A",
+    submodules = [...]
+)
+```
+
+Libraries converted from a Dune config are automatically annotated with this comment if they don't have an explicit
+module list.
+
 [Gazelle]: https://github.com/bazelbuild/bazel-gazelle
 [OBazl]: https://github.com/obazl/rules_ocaml
 [Bazel]: https://bazel.build

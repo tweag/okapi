@@ -145,6 +145,95 @@ populate the attributes `opts` (from `flags`) and `deps_opam` (from `libraries`)
 `select` directives are parsed in order to find the correct module file names for the library, but the selection of the
 correct source file has to be done manually, since there is no (easy) way to check for the presence of dependencies.
 
+Given a Dune config like this:
+
+```dune
+(library
+ (name sub_lib)
+ (public_name sub-lib)
+ (flags (:standard -open Angstrom))
+ (libraries
+   angstrom
+   re
+   ipaddr
+   (select final.ml from
+     (angstrom -> choice1.ml)
+     (-> choice2.ml))
+  ))
+
+(library
+ (name sub_extra_lib)
+ (public_name sub-extra-lib)
+ (modules foo bar))
+```
+
+The generated build will be:
+
+```bzl
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
+
+ocaml_module(
+    name = "final",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":final.ml",
+)
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
+)
+
+# okapi:auto
+ocaml_ns_library(
+    name = "#Sub_lib",
+    submodules = [
+        "final",
+        "sub",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ocaml_module(
+    name = "foo",
+    deps_opam = [],
+    opts = [],
+    struct = ":foo.ml",
+)
+
+ocaml_module(
+    name = "bar",
+    deps_opam = [],
+    opts = [],
+    struct = ":bar.ml",
+)
+
+ocaml_ns_library(
+    name = "#Sub_extra_lib",
+    submodules = [
+        "foo",
+        "bar",
+    ],
+    visibility = ["//visibility:public"],
+)
+```
+
 # Multilib Builds
 
 If a build file defines more than one library, as is also possible with Dune, the generator cannot decide which library

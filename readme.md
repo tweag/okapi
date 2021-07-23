@@ -169,7 +169,7 @@ Given a Dune config like this:
 
 The generated build will be:
 
-```bzl
+```scheme
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_module(

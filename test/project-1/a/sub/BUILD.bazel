@@ -15,35 +15,6 @@ ocaml_module(
 )
 
 ocaml_module(
-    name = "new",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    sig = ":new_sig",
-    struct = ":new.ml",
-)
-
-ocaml_signature(
-    name = "new_sig",
-    src = ":new.mli",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-)
-
-ocaml_module(
     name = "sub",
     deps_opam = [
         "angstrom",
@@ -62,7 +33,6 @@ ocaml_ns_library(
     name = "#Sub_lib",
     submodules = [
         "final",
-        "new",
         "sub",
     ],
     visibility = ["//visibility:public"],

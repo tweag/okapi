@@ -1,14 +1,28 @@
 {
   description = "Gazelle Extension for OBazl";
 
-  inputs.obazl.url = github:tek/rules_ocaml;
+  inputs = {
+    nixpkgs.url = github:NixOS/nixpkgs/fbfb79400a08bf754e32b4d4fc3f7d8f8055cf94;
+    flake-utils.url = github:numtide/flake-utils;
+    obazl.url = github:tek/rules_ocaml;
+  };
 
-  outputs = { obazl, ... }:
+  outputs = { nixpkgs, flake-utils, obazl, ... }:
   let
-    depsOpam = [
-      { name = "codept"; version = "0.11.0"; }
-      { name = "angstrom"; version = "0.15.0"; }
-    ];
+    main = system:
+    let
+      pkgs = import nixpkgs { inherit system; };
+      test = import nix/test.nix { inherit pkgs; };
+      testInShell = pkgs.writeScript "test" "nix develop -c ${test.test}";
+    in {
+      devShell = (obazl.flakes {}).shell pkgs;
+      apps = {
+        test = {
+          type = "app";
+          program = "${testInShell}";
+        };
+      };
+    };
 
-  in obazl.flakes { inherit depsOpam; };
+  in flake-utils.lib.eachDefaultSystem main;
 }

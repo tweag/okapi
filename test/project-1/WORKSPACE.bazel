@@ -2,7 +2,7 @@ workspace(name = "okapi-test")
 
 local_repository(
     name = "okapi",
-    path = "..",
+    path = "../..",
 )
 
 load("@okapi//bzl:deps.bzl", "okapi_deps")

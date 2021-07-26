@@ -8,3 +8,4 @@
 /test/bazel-test
 /test/bazel-testlogs
 /test/bazel
+/test/temp/

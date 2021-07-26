@@ -79,11 +79,11 @@ Now build files for directories containing OCaml sources will be generated when 
 bazel run //:gazelle
 ```
 
-This repository contains an example project in `test/`.
+This repository contains an example project in `test/project-1`.
 Build generation can be observed in action by running the following command in that directory:
 
 ```sh
-rm -f a/BUILD.bazel && bazel run //:gazelle && bazel build //a:#A
+rm -f a/BUILD.bazel a/sub/BUILD.bazel && bazel run //:gazelle && bazel build //a:#A
 ```
 
 This creates the following `a/BUILD.bazel`:

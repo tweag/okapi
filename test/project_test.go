@@ -2,7 +2,6 @@ package bazel_test
 
 import (
   "io/ioutil"
-  "log"
   "path/filepath"
   "strings"
   "testing"
@@ -134,7 +133,6 @@ func TestBuild(t *testing.T) {
   output, err := bazel_testing.BazelOutput("info", "workspace")
   ws := string(output[:])
   if err != nil { t.Fatal(err) }
-  log.Print(ws)
   aBuildFile := filepath.Join(strings.TrimSpace(ws), "a", "BUILD.bazel")
   aBuildBytes, err1 := ioutil.ReadFile(aBuildFile)
   if err1 != nil { t.Fatal(err1) }

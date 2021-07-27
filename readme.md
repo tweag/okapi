@@ -7,7 +7,7 @@ It uses [codept] to compute the module dependencies.
 
 Okapi configures most of Gazelle's boilerplate with a few helper macros for `WORKSPACE` and `BUILD`.
 
-The file `WORKSPACE.bazel` specifies dependencies on Okapi, Gazelle and OBazl and handles project-wide setup:
+The file `WORKSPACE` specifies dependencies on Okapi, Gazelle and OBazl and handles project-wide setup:
 
 ```bzl
 workspace(name = "obazl-project-1")

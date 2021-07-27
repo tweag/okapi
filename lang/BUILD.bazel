@@ -18,3 +18,13 @@ go_library(
         "@io_bazel_rules_go//go/tools/bazel:go_default_library",
     ],
 )
+
+filegroup(
+    name = "all_files",
+    testonly = True,
+    srcs = [
+        "BUILD.bazel",
+        "lang.go",
+    ],
+    visibility = ["//visibility:public"],
+)

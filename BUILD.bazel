@@ -3,9 +3,10 @@ filegroup(
     testonly = True,
     srcs = [
         "BUILD.bazel",
-        "deps.bzl",
-        "generate.bzl",
-        "setup.bzl",
+        "WORKSPACE",
+        "WORKSPACE.bazel",
+        "//bzl:all_files",
+        "//lang:all_files",
     ],
     visibility = ["//visibility:public"],
 )

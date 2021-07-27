@@ -68,13 +68,17 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "narHash": "sha256-lu24DzMXXDojdfVautU2WgcYOVi+hJM8FKprG1+9Ezo=",
-        "path": "../rules_ocaml",
-        "type": "path"
+        "lastModified": 1627309469,
+        "narHash": "sha256-dE4cqc12EVDaN5K68za+t9y7me76CsdxEMSApGQcG2s=",
+        "owner": "tek",
+        "repo": "rules_ocaml",
+        "rev": "2d7a2f0d247e09668dfc74c13cea65e1d841bce4",
+        "type": "github"
       },
       "original": {
-        "path": "../rules_ocaml",
-        "type": "path"
+        "owner": "tek",
+        "repo": "rules_ocaml",
+        "type": "github"
       }
     },
     "root": {

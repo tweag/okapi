@@ -9,6 +9,7 @@ import (
   "os/exec"
   "path/filepath"
   "regexp"
+  "sort"
   "strings"
 
   "github.com/bazelbuild/bazel-gazelle/config"
@@ -426,6 +427,7 @@ func libraryDep(src Source) string { return ":" + src.Name }
 func libraryDeps(sources Deps) []string {
   var deps []string
   for src := range sources { deps = append(deps, libraryDep(src)) }
+  sort.Strings(deps)
   return deps
 }
 
@@ -452,6 +454,7 @@ func resultForRules(rules []*rule.Rule) language.GenerateResult {
 }
 
 func sigModRules(src Source, deps []string) []*rule.Rule {
+  sort.Strings(deps)
   var rules []*rule.Rule
   rules = append(rules, moduleRule(src, deps))
   if src.Intf { rules = append(rules, signatureRule(src, deps)) }
@@ -460,6 +463,9 @@ func sigModRules(src Source, deps []string) []*rule.Rule {
 
 func sourceRules(names []string, sources Deps) []*rule.Rule {
   var rules []*rule.Rule
+  log.Print(names)
+  sort.Strings(names)
+  log.Print(names)
   for _, name := range names {
     for src, deps := range sources {
       if src.Name == name[1:] {
@@ -472,7 +478,11 @@ func sourceRules(names []string, sources Deps) []*rule.Rule {
 
 func sourceRulesAuto(sources Deps) []*rule.Rule {
   var rules []*rule.Rule
-  for src, deps := range sources {
+  var keys []Source
+  for key := range sources { keys = append(keys, key) }
+  sort.Slice(keys, func(i, j int) bool { return keys[i].Name < keys[j].Name })
+  for _, src := range keys {
+    deps := sources[src]
     rules = append(rules, sigModRules(src, deps)...)
   }
   return rules

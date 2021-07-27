@@ -175,11 +175,17 @@ func sexpMap(elements []SexpNode) SexpNode {
       canMap = true
       for _, node := range elements[1:] {
         l, isList := node.(SexpList)
-        if isList && len(l.Sub) > 1 {
+        if isList && len(l.Sub) >= 1 {
           s, isString := l.Sub[0].(SexpString)
           if isString && smap[s.Content] == nil {
             var value SexpNode
-            if len(l.Sub) == 2 { value = l.Sub[1] } else { value = SexpList{l.Sub[1:]} }
+            if len(l.Sub) == 2 {
+              value = l.Sub[1]
+            } else if len(l.Sub) == 1 {
+              value = SexpEmpty{}
+            } else {
+              value = SexpList{l.Sub[1:]}
+            }
             smap[s.Content] = value
           } else { canMap = false }
         } else { canMap = false }
@@ -326,22 +332,20 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
   var libraries []DuneLib
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
-    if isMap {
-      if dune.Name == "library" {
-        name, nameIsString := dune.Values["name"].(SexpString)
-        if !nameIsString { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
-        wrapped := dune.Values["wrapped"] != SexpString{"false"}
-        modules := DuneList(libName, "modules", dune)
-        lib := DuneLib{
-          Name: name.Content,
-          Modules: modules,
-          Flags: DuneList(libName, "flags", dune),
-          Libraries: duneLibraryDeps(libName, dune),
-          Auto: len(modules) == 0,
-          Wrapped: wrapped,
-        }
-        libraries = append(libraries, lib)
+    if isMap && dune.Name == "library" {
+      name, nameIsString := dune.Values["name"].(SexpString)
+      if !nameIsString { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
+      wrapped := dune.Values["wrapped"] != SexpString{"false"}
+      modules := DuneList(libName, "modules", dune)
+      lib := DuneLib{
+        Name: name.Content,
+        Modules: modules,
+        Flags: DuneList(libName, "flags", dune),
+        Libraries: duneLibraryDeps(libName, dune),
+        Auto: len(modules) == 0,
+        Wrapped: wrapped,
       }
+      libraries = append(libraries, lib)
     }
   }
   return libraries
@@ -463,9 +467,7 @@ func sigModRules(src Source, deps []string) []*rule.Rule {
 
 func sourceRules(names []string, sources Deps) []*rule.Rule {
   var rules []*rule.Rule
-  log.Print(names)
   sort.Strings(names)
-  log.Print(names)
   for _, name := range names {
     for src, deps := range sources {
       if src.Name == name[1:] {
@@ -532,7 +534,9 @@ func duneLibsWithAuto(sources Deps, auto DuneLib, concrete []DuneLib) []*rule.Ru
 }
 
 func duneLibsWithoutAuto(sources Deps, libs []DuneLib) []*rule.Rule {
-  return nil
+  var rules []*rule.Rule
+  for _, lib := range libs { rules = append(rules, duneLib(sources, lib)...) }
+  return rules
 }
 
 func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule {
@@ -721,22 +725,27 @@ func findDune(dir string, files []string) string {
   return ""
 }
 
+func generateIfOcaml(args language.GenerateArgs) []*rule.Rule {
+  for _, file := range args.RegularFiles {
+    ext := filepath.Ext(file)
+    if ext == ".ml" || ext == ".mli" {
+      return GenerateRules(
+        generateLibraryName(args.Dir),
+        Dependencies(args.Dir, args.RegularFiles),
+        findDune(args.Dir, args.RegularFiles),
+      )
+    }
+  }
+  return nil
+}
+
 func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateResult {
   var rules []*rule.Rule
   var imports []interface{}
   if args.File != nil && args.File.Rules != nil && containsLibrary(args.File.Rules) {
     rules = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles))
   } else {
-    for _, file := range args.RegularFiles {
-      ext := filepath.Ext(file)
-      if ext == ".ml" || ext == ".mli" {
-        rules = GenerateRules(
-          generateLibraryName(args.Dir),
-          Dependencies(args.Dir, args.RegularFiles),
-          findDune(args.Dir, args.RegularFiles),
-        )
-      }
-    }
+    rules = generateIfOcaml(args)
   }
   for range rules { imports = append(imports, 0) }
   return language.GenerateResult{

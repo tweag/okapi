@@ -128,16 +128,86 @@ ocaml_ns_library(
 )
 `
 
+const subBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
+
+ocaml_module(
+    name = "final",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":final.ml",
+)
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
+)
+
+# okapi:auto
+ocaml_ns_library(
+    name = "#Sub_lib",
+    submodules = [
+        "final",
+        "sub",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ocaml_module(
+    name = "foo",
+    deps_opam = [],
+    opts = [],
+    struct = ":foo.ml",
+)
+
+ocaml_module(
+    name = "bar",
+    deps_opam = [],
+    opts = [],
+    struct = ":bar.ml",
+)
+
+ocaml_ns_library(
+    name = "#Sub_extra_lib",
+    submodules = [
+        "foo",
+        "bar",
+    ],
+    visibility = ["//visibility:public"],
+)
+`
+
+func checkFile(t *testing.T, ws string, target string, path... string) {
+  rel := filepath.Join(path...)
+  file := filepath.Join(strings.TrimSpace(ws), rel)
+  bytes, err1 := ioutil.ReadFile(file)
+  if err1 != nil { t.Fatal(err1) }
+  content := string(bytes)
+  if content != target { t.Fatal(rel + " doesn't match:\n" + content) }
+}
+
 func TestBuild(t *testing.T) {
   if err := bazel_testing.RunBazel("run", "//:gazelle"); err != nil { t.Fatal(err) }
   output, err := bazel_testing.BazelOutput("info", "workspace")
   ws := string(output[:])
   if err != nil { t.Fatal(err) }
-  aBuildFile := filepath.Join(strings.TrimSpace(ws), "a", "BUILD.bazel")
-  aBuildBytes, err1 := ioutil.ReadFile(aBuildFile)
-  if err1 != nil { t.Fatal(err1) }
-  aBuild := string(aBuildBytes)
-  if aBuild != aBuildTarget { t.Fatal("a/BUILD.bazel doesn't match:\n" + aBuild) }
+  checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
+  checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) { bazel_testing.TestMain(m, testArgs) }

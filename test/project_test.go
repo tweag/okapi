@@ -45,6 +45,7 @@ end
  (name sub_lib)
  (public_name sub-lib)
  (flags (:standard -open Angstrom))
+ (preprocess (pps ppx_inline_test))
  (libraries
    angstrom
    re
@@ -84,16 +85,16 @@ okapi_setup_legacy()
 
 const aBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
+ocaml_signature(
+    name = "a2_sig",
+    src = ":a2.mli",
+    deps = [":f1"],
+)
+
 ocaml_module(
     name = "a2",
     sig = ":a2_sig",
     struct = ":a2.ml",
-    deps = [":f1"],
-)
-
-ocaml_signature(
-    name = "a2_sig",
-    src = ":a2.mli",
     deps = [":f1"],
 )
 
@@ -106,15 +107,15 @@ ocaml_module(
     ],
 )
 
+ocaml_signature(
+    name = "f1_sig",
+    src = ":f1.mli",
+)
+
 ocaml_module(
     name = "f1",
     sig = ":f1_sig",
     struct = ":f1.ml",
-)
-
-ocaml_signature(
-    name = "f1_sig",
-    src = ":f1.mli",
 )
 
 ocaml_ns_library(
@@ -128,9 +129,15 @@ ocaml_ns_library(
 )
 `
 
-const subBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
+const subBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ppx_executable", "ppx_module", "ppx_ns_library")
 
-ocaml_module(
+ppx_executable(
+    name = "ppx_sub_lib",
+    deps_opam = ["ppx_inline_test"],
+    main = "@obazl_rules_ocaml//dsl:ppx_driver",
+)
+
+ppx_module(
     name = "final",
     deps_opam = [
         "angstrom",
@@ -141,10 +148,12 @@ ocaml_module(
         "-open",
         "Angstrom",
     ],
+    ppx = ":ppx_sub_lib",
+    ppx_print = "@ppx//print:text",
     struct = ":final.ml",
 )
 
-ocaml_module(
+ppx_module(
     name = "sub",
     deps_opam = [
         "angstrom",
@@ -155,11 +164,13 @@ ocaml_module(
         "-open",
         "Angstrom",
     ],
+    ppx = ":ppx_sub_lib",
+    ppx_print = "@ppx//print:text",
     struct = ":sub.ml",
 )
 
 # okapi:auto
-ocaml_ns_library(
+ppx_ns_library(
     name = "#Sub_lib",
     submodules = [
         "final",

@@ -145,6 +145,9 @@ populate the attributes `opts` (from `flags`) and `deps_opam` (from `libraries`)
 `select` directives are parsed in order to find the correct module file names for the library, but the selection of the
 correct source file has to be done manually, since there is no (easy) way to check for the presence of dependencies.
 
+Preprocessors are supported as well, causing the addition of a `ppx_executable`, which is then referenced by the
+library's modules, using the rules `ppx_module` and `ppx_ns_library`.
+
 Given a Dune config like this:
 
 ```dune
@@ -164,6 +167,7 @@ Given a Dune config like this:
 (library
  (name sub_extra_lib)
  (public_name sub-extra-lib)
+ (preprocess (pps ppx_inline_test))
  (modules foo bar))
 ```
 
@@ -210,21 +214,31 @@ ocaml_ns_library(
     visibility = ["//visibility:public"],
 )
 
-ocaml_module(
+ppx_executable(
+    name = "ppx_sub_extra_lib",
+    deps_opam = ["ppx_inline_test"],
+    main = "@obazl_rules_ocaml//dsl:ppx_driver",
+)
+
+ppx_module(
     name = "foo",
     deps_opam = [],
     opts = [],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
     struct = ":foo.ml",
 )
 
-ocaml_module(
+ppx_module(
     name = "bar",
     deps_opam = [],
     opts = [],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
     struct = ":bar.ml",
 )
 
-ocaml_ns_library(
+ppx_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
         "foo",

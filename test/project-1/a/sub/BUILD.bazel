@@ -1,4 +1,4 @@
-load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature", "ppx_executable", "ppx_module", "ppx_ns_library")
 
 ocaml_module(
     name = "final",
@@ -28,35 +28,96 @@ ocaml_module(
     struct = ":sub.ml",
 )
 
+ocaml_signature(
+    name = "new_sig",
+    src = ":new.mli",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+)
+
+ocaml_module(
+    name = "new",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    sig = ":new_sig",
+    struct = ":new.ml",
+)
+
 # okapi:auto
 ocaml_ns_library(
     name = "#Sub_lib",
     submodules = [
-        "final",
-        "sub",
+        ":bar",
+        ":choice1",
+        ":choice2",
+        ":foo",
+        ":new",
+        ":sub",
     ],
     visibility = ["//visibility:public"],
 )
 
-ocaml_module(
+ppx_executable(
+    name = "ppx_sub_extra_lib",
+    deps_opam = ["ppx_inline_test"],
+    main = "@obazl_rules_ocaml//dsl:ppx_driver",
+)
+
+ocaml_signature(
+    name = "foo_sig",
+    src = ":foo.mli",
+    deps_opam = [],
+    opts = [],
+)
+
+ppx_module(
     name = "foo",
     deps_opam = [],
     opts = [],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
+    sig = ":foo_sig",
     struct = ":foo.ml",
 )
 
-ocaml_module(
+ppx_module(
     name = "bar",
     deps_opam = [],
     opts = [],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
     struct = ":bar.ml",
 )
 
-ocaml_ns_library(
+ppx_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
         "foo",
         "bar",
     ],
     visibility = ["//visibility:public"],
+)
+
+ocaml_module(
+    name = "choice1",
+    struct = ":choice1.ml",
+)
+
+ocaml_module(
+    name = "choice2",
+    struct = ":choice2.ml",
 )

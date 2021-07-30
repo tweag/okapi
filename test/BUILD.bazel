@@ -4,6 +4,7 @@ go_bazel_test(
     name = "bazel_test",
     srcs = [
         "project_test.go",
+        "sexp_test.go",
     ],
     rule_files = [
         "@okapi//:all_files",

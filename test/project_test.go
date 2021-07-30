@@ -1,13 +1,12 @@
 package bazel_test
 
 import (
-	"io/ioutil"
-	"log"
-	"path/filepath"
-	"strings"
-	"testing"
+  "io/ioutil"
+  "path/filepath"
+  "strings"
+  "testing"
 
-	"github.com/bazelbuild/rules_go/go/tools/bazel_testing"
+  "github.com/bazelbuild/rules_go/go/tools/bazel_testing"
 )
 
 var testArgs = bazel_testing.Args{
@@ -221,7 +220,6 @@ func checkFile(t *testing.T, ws string, target string, path... string) {
   bytes, err1 := ioutil.ReadFile(file)
   if err1 != nil { t.Fatal(err1) }
   content := string(bytes)
-  log.Print(content)
   if content != target { t.Fatal(rel + " doesn't match:\n" + content) }
 }
 
@@ -234,4 +232,6 @@ func TestBuild(t *testing.T) {
   checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
 }
 
-func TestMain(m *testing.M) { bazel_testing.TestMain(m, testArgs) }
+func TestMain(m *testing.M) {
+  bazel_testing.TestMain(m, testArgs)
+}

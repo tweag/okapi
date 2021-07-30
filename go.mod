@@ -1,6 +1,6 @@
-module github.com/tweag/okapi/lang
+module github.com/tweag/okapi
 
 go 1.16
 
 require github.com/bazelbuild/bazel-gazelle v0.23.0
-require github.com/bazelbuild/rules_go v0.0.0-20190719190356-6dae44dc5cab
+require github.com/bazelbuild/rules_go v0.28.0

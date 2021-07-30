@@ -1,8 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "lang",
-    srcs = ["lang.go"],
+    srcs = [
+        "lang.go",
+        "sexp.go",
+    ],
     importpath = "github.com/tweag/okapi/lang",
     visibility = ["//visibility:public"],
     deps = [
@@ -19,12 +22,19 @@ go_library(
     ],
 )
 
+go_test(
+    name = "lang_test",
+    srcs = ["sexp_test.go"],
+    embed = [":lang"],
+)
+
 filegroup(
     name = "all_files",
     testonly = True,
     srcs = [
         "BUILD.bazel",
         "lang.go",
+        "sexp_test.go",
     ],
     visibility = ["//visibility:public"],
 )

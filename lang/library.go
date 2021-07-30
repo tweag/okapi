@@ -1,9 +1,9 @@
 package okapi
 
 import (
-	"sort"
+  "sort"
 
-	"github.com/bazelbuild/bazel-gazelle/rule"
+  "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
 type ModuleAlt struct {
@@ -18,17 +18,26 @@ type ModuleChoice struct {
 
 type PpxKind interface {
   exe(name string) []*rule.Rule
+  inlineTest() bool
+  depsOpam() []string
 }
 type PpxTransitive struct {}
-type PpxDirect struct { Deps []string }
+type PpxDirect struct { deps []string }
 
-func (ppx PpxDirect) exe(slug string) []*rule.Rule { return []*rule.Rule{ppxExecutable(slug, ppx.Deps)} }
+func (ppx PpxDirect) exe(slug string) []*rule.Rule { return []*rule.Rule{ppxExecutable(slug, ppx.deps)} }
 func (PpxTransitive) exe(string) []*rule.Rule { return nil }
+
+func (ppx PpxDirect) inlineTest() bool { return contains("ppx_inline_test", ppx.deps) }
+func (PpxTransitive) inlineTest() bool { return false }
+
+func (ppx PpxDirect) depsOpam() []string { return ppx.deps }
+func (PpxTransitive) depsOpam() []string { return nil }
 
 type Kind interface {
   libraryRuleName() string
   moduleRuleName() string
   moduleAttr() string
+  depsOpam() []string
   addAttrs(slug string, r *rule.Rule) *rule.Rule
   extraRules(name string) []*rule.Rule
   wrapped() bool
@@ -54,17 +63,25 @@ func (KindNs) moduleAttr() string { return "submodules" }
 func (KindPpx) moduleAttr() string { return "modules" }
 func (KindPlain) moduleAttr() string { return "modules" }
 
+func (k KindNsPpx) depsOpam() []string { return k.ppx.depsOpam() }
+func (KindNs) depsOpam() []string { return nil }
+func (k KindPpx) depsOpam() []string { return k.ppx.depsOpam() }
+func (KindPlain) depsOpam() []string { return nil }
+
 func ppxName(libName string) string { return "ppx_" + libName }
 
-func addPpxAttrs(slug string, r *rule.Rule) *rule.Rule {
+func addPpxAttrs(slug string, r *rule.Rule, ppx PpxKind) *rule.Rule {
   r.SetAttr("ppx", ":" + ppxName(slug))
   r.SetAttr("ppx_print", "@ppx//print:text")
+  if ppx.inlineTest() {
+    r.SetAttr("ppx_tags", []string{"inline-test"})
+  }
   return r
 }
 
-func (KindNsPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r) }
+func (k KindNsPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r, k.ppx) }
 func (KindNs) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
-func (KindPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r) }
+func (k KindPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r, k.ppx) }
 func (KindPlain) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
 
 func ppxExecutable(name string, deps []string) *rule.Rule {
@@ -104,7 +121,7 @@ func targetNames(deps []string) []string {
 }
 
 func commonAttrs(lib Library, r *rule.Rule, deps []string) *rule.Rule {
-  r.SetAttr("deps_opam", lib.DepsOpam)
+  r.SetAttr("deps_opam", append(lib.DepsOpam, lib.Kind.depsOpam()...))
   r.SetAttr("opts", lib.Opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
   return lib.Kind.addAttrs(lib.Slug, r)

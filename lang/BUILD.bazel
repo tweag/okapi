@@ -5,7 +5,9 @@ go_library(
     srcs = [
         "codept.go",
         "dune.go",
+        "generate.go",
         "lang.go",
+        "library.go",
         "sexp.go",
     ],
     importpath = "github.com/tweag/okapi/lang",
@@ -38,7 +40,12 @@ filegroup(
     testonly = True,
     srcs = [
         "BUILD.bazel",
+        "codept.go",
+        "dune.go",
+        "generate.go",
         "lang.go",
+        "library.go",
+        "sexp.go",
         "sexp_test.go",
         "dune_test.go",
     ],

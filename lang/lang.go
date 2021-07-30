@@ -43,17 +43,22 @@ type Codept struct {
 type Source struct {
   Name string
   Intf bool
+  Deps []string
 }
 
-type Deps = map[Source][]string
+type Deps = map[string]Source
 
 func depName(file string) string {
   return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 }
 
-func consSource(name string, sigs map[string][]string) Source {
+func consSource(name string, sigs map[string][]string, deps []string) Source {
   _, intf := sigs[name]
-  return Source{name, intf}
+  return Source{
+    Name: name,
+    Intf: intf,
+    Deps: deps,
+  }
 }
 
 func consDeps(dir string, codept Codept) Deps {
@@ -76,7 +81,7 @@ func consDeps(dir string, codept Codept) Deps {
       if filepath.Ext(src.File) == ".mli" { sigs[name] = deps } else { mods[name] = deps }
     }
   }
-  for src, deps := range mods { sources[consSource(src, sigs)] = deps }
+  for src, deps := range mods { sources[src] = consSource(src, sigs, deps) }
   return sources
 }
 
@@ -239,8 +244,196 @@ func sexpList(tokens []string) ([]SexpNode, []string) {
 }
 
 // -----------------------------------------------------------------------------
+// Library
+// -----------------------------------------------------------------------------
+
+type ModuleAlt struct {
+  Cond string
+  Choice string
+}
+
+type ModuleChoice struct {
+  Out string
+  Alts []ModuleAlt
+}
+
+type PpxKind interface {
+  exe(name string) []*rule.Rule
+}
+type PpxTransitive struct {}
+type PpxDirect struct { Deps []string }
+
+func (ppx PpxDirect) exe(slug string) []*rule.Rule { return []*rule.Rule{ppxExecutable(slug, ppx.Deps)} }
+func (PpxTransitive) exe(string) []*rule.Rule { return nil }
+
+type Kind interface {
+  libraryRuleName() string
+  moduleRuleName() string
+  moduleAttr() string
+  addAttrs(slug string, r *rule.Rule) *rule.Rule
+  extraRules(name string) []*rule.Rule
+  wrapped() bool
+}
+
+type KindNsPpx struct { ppx PpxKind }
+type KindNs struct {}
+type KindPpx struct { ppx PpxKind }
+type KindPlain struct {}
+
+func (KindNsPpx) libraryRuleName() string { return "ppx_ns_library" }
+func (KindNs) libraryRuleName() string { return "ocaml_ns_library" }
+func (KindPpx) libraryRuleName() string { return "ppx_library" }
+func (KindPlain) libraryRuleName() string { return "ocaml_library" }
+
+func (KindNsPpx) moduleRuleName() string { return "ppx_module" }
+func (KindNs) moduleRuleName() string { return "ocaml_module" }
+func (KindPpx) moduleRuleName() string { return "ppx_module" }
+func (KindPlain) moduleRuleName() string { return "ocaml_module" }
+
+func (KindNsPpx) moduleAttr() string { return "submodules" }
+func (KindNs) moduleAttr() string { return "submodules" }
+func (KindPpx) moduleAttr() string { return "modules" }
+func (KindPlain) moduleAttr() string { return "modules" }
+
+func ppxName(libName string) string { return "ppx_" + libName }
+
+func addPpxAttrs(slug string, r *rule.Rule) *rule.Rule {
+  r.SetAttr("ppx", ":" + ppxName(slug))
+  r.SetAttr("ppx_print", "@ppx//print:text")
+  return r
+}
+
+func (KindNsPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r) }
+func (KindNs) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
+func (KindPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r) }
+func (KindPlain) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
+
+func ppxExecutable(name string, deps []string) *rule.Rule {
+  r := rule.NewRule("ppx_executable", ppxName(name))
+  r.SetAttr("deps_opam", deps)
+  r.SetAttr("main", "@obazl_rules_ocaml//dsl:ppx_driver")
+  return r
+}
+
+func (k KindNsPpx) extraRules(slug string) []*rule.Rule { return k.ppx.exe(slug) }
+func (KindNs) extraRules(string) []*rule.Rule { return nil }
+func (k KindPpx) extraRules(slug string) []*rule.Rule { return k.ppx.exe(slug) }
+func (KindPlain) extraRules(string) []*rule.Rule { return nil }
+
+func (KindNsPpx) wrapped() bool { return true }
+func (KindNs) wrapped() bool { return true }
+func (KindPpx) wrapped() bool { return false }
+func (KindPlain) wrapped() bool { return false }
+
+type Library struct {
+  Slug string
+  Name string
+  Modules []string
+  Opts []string
+  DepsOpam []string
+  Choices []ModuleChoice
+  Auto bool
+  Wrapped bool
+  Kind Kind
+}
+
+func commonAttrs(lib Library, r *rule.Rule, deps []string) *rule.Rule {
+  r.SetAttr("deps_opam", lib.DepsOpam)
+  r.SetAttr("opts", lib.Opts)
+  if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
+  return lib.Kind.addAttrs(lib.Slug, r)
+}
+
+func libSignatureRule(src Source) *rule.Rule {
+  r := rule.NewRule("ocaml_signature", sigTarget(src))
+  r.SetAttr("src", ":" + src.Name + ".mli")
+  return r
+}
+
+func libModuleRule(lib Library, src Source) *rule.Rule {
+  r := rule.NewRule(lib.Kind.moduleRuleName(), src.Name)
+  r.SetAttr("struct", ":" + src.Name + ".ml")
+  if src.Intf { r.SetAttr("sig", ":" + sigTarget(src)) }
+  return r
+}
+
+func libSourceRules(sources Deps, lib Library) []*rule.Rule {
+  var rules []*rule.Rule
+  rules = append(rules, lib.Kind.extraRules(lib.Slug)...)
+  for _, name := range lib.Modules {
+    src, srcExists := sources[name]
+    if !srcExists { src = Source{name, false, nil} }
+    if src.Intf { rules = append(rules, commonAttrs(lib, libSignatureRule(src), src.Deps)) }
+    rules = append(rules, commonAttrs(lib, libModuleRule(lib, src), src.Deps))
+  }
+  return rules
+}
+
+func setLibraryModules(lib Library, r *rule.Rule) {
+  r.SetAttr(lib.Kind.moduleAttr(), targetNames(lib.Modules))
+  r.SetAttr("visibility", []string{"//visibility:public"})
+}
+
+func libraryRule(lib Library) *rule.Rule {
+  r := rule.NewRule(lib.Kind.libraryRuleName(), lib.Name)
+  setLibraryModules(lib, r)
+  if lib.Auto { r.AddComment("# okapi:auto") }
+  return r
+}
+
+func library(sources Deps, lib Library) []*rule.Rule {
+  return append(libSourceRules(sources, lib), libraryRule(lib))
+}
+
+func libChoices(libs []Library) map[string]bool {
+  result := make(map[string]bool)
+  for _, lib := range libs {
+    for _, c := range lib.Choices {
+      for _, a := range c.Alts {
+        result[depName(a.Choice)] = true
+      }
+    }
+  }
+  return result
+}
+
+func autoModules(libs []Library, sources Deps) []string {
+  knownModules := make(map[string]bool)
+  choices := libChoices(libs)
+  var auto []string
+  for _, lib := range libs {
+    for _, mod := range lib.Modules { knownModules[mod] = true }
+  }
+  for name := range sources {
+    if _, exists := knownModules[name]; !exists {
+      if _, isChoice := choices[name]; !isChoice {
+        auto = append(auto, name)
+      }
+    }
+  }
+  return auto
+}
+
+// -----------------------------------------------------------------------------
 // Dune
 // -----------------------------------------------------------------------------
+
+type DuneLibDep interface {}
+type DuneLibOpam struct { Name string }
+type DuneLibSelect struct {
+  Choice ModuleChoice
+}
+
+type DuneLib struct {
+  Name string
+  Modules []string
+  Flags []string
+  Libraries []DuneLibDep
+  Auto bool
+  Wrapped bool
+  Ppx bool
+  Preprocess []string
+}
 
 func parseDune(duneFile string) SexpList {
   bytes, _ := ioutil.ReadFile(duneFile)
@@ -267,29 +460,6 @@ func parseDune(duneFile string) SexpList {
   return SexpList{result}
 }
 
-type DuneAlt struct {
-  Cond string
-  Choice string
-}
-
-type DuneLibDep interface {}
-type DuneLibOpam struct { Name string }
-type DuneLibSelect struct {
-  Out string
-  Alts []DuneAlt
-}
-
-type DuneLib struct {
-  Name string
-  Modules []string
-  Flags []string
-  Libraries []DuneLibDep
-  Auto bool
-  Wrapped bool
-  Ppx bool
-  Preprocess []string
-}
-
 func DuneList(name string, attr string, dune SexpMap) []string {
   var result []string
   raw := dune.Values[attr]
@@ -299,9 +469,7 @@ func DuneList(name string, attr string, dune SexpMap) []string {
     // TODO this is an exclude directive
     // if item[:2] == []string{":standard", "\\"}
     for _, item := range items {
-      if item[:1] != ":" {
-        result = append(result, item)
-      }
+      if item[:1] != ":" { result = append(result, item) }
     }
   }
   return result
@@ -322,17 +490,17 @@ func duneLibraryDeps(libName string, dune SexpMap) []DuneLibDep {
         sel, err := entry.List()
         if err != nil { log.Fatalf("library %s: unparsable libraries entry: %#v; %s", libName, sel, err) }
         if len(sel) > 3 && sel[0] == selectString {
-          var alts []DuneAlt
+          var alts []ModuleAlt
           for _, alt := range sel[3:] {
             ss, err := sexpStrings(alt)
-            if err == nil && len(ss) == 2 && ss[0] == "->" { alts = append(alts, DuneAlt{"", ss[1]}) } else
-            if err == nil && len(ss) == 3 && ss[1] == "->" { alts = append(alts, DuneAlt{ss[0], ss[2]}) } else {
+            if err == nil && len(ss) == 2 && ss[0] == "->" { alts = append(alts, ModuleAlt{"", ss[1]}) } else
+            if err == nil && len(ss) == 3 && ss[1] == "->" { alts = append(alts, ModuleAlt{ss[0], ss[2]}) } else {
               log.Fatalf("library %s: unparsable select alternative: %#v; %s", libName, alt, err)
             }
           }
           final, err := sel[1].String()
           if err != nil { log.Fatalf("library %s: invalid type for select file name: %#v; %s", libName, sel, err) }
-          deps = append(deps, DuneLibSelect{final, alts})
+          deps = append(deps, DuneLibSelect{ModuleChoice{final, alts}})
         }
       }
     }
@@ -396,22 +564,25 @@ func contains(target string, items []string) bool {
   return false
 }
 
-func filterSelects(modules []string, libs []DuneLibDep) []string {
+func modulesWithSelectOutputs(modules []string, libs []DuneLibDep) []string {
   var result []string
   var alts []string
   for _, lib := range libs {
-    sel, isSel := lib.(DuneLibSelect)
-    if isSel {
-      result = append(result, depName(sel.Out))
-      for _, alt := range sel.Alts {
-        alts = append(alts, depName(alt.Choice))
-      }
+    if sel, isSel := lib.(DuneLibSelect); isSel {
+      result = append(result, depName(sel.Choice.Out))
+      for _, alt := range sel.Choice.Alts { alts = append(alts, depName(alt.Choice)) }
     }
   }
-  for _, lib := range modules {
-    if !contains(lib, alts) { result = append(result, lib) }
-  }
+  for _, lib := range modules { if !contains(lib, alts) { result = append(result, lib) } }
   return result
+}
+
+func duneChoices(libs []DuneLibDep) []ModuleChoice {
+  var choices []ModuleChoice
+  for _, dep := range libs {
+    if sel, isSel := dep.(DuneLibSelect); isSel { choices = append(choices, sel.Choice) }
+  }
+  return choices
 }
 
 func opamDeps(deps []DuneLibDep) []string {
@@ -423,10 +594,28 @@ func opamDeps(deps []DuneLibDep) []string {
   return result
 }
 
-func duneAttrs(rule *rule.Rule, dune DuneLib) *rule.Rule {
-  rule.SetAttr("deps_opam", opamDeps(dune.Libraries))
-  rule.SetAttr("opts", dune.Flags)
-  return rule
+func dunePpx(deps []string, wrapped bool) Kind {
+  ppx := false
+  if len(deps) > 0 { ppx = true }
+  if wrapped {
+    if ppx { return KindNsPpx{PpxDirect{deps}} } else { return KindNs{} }
+  } else {
+    if ppx { return KindPpx{PpxDirect{deps}} } else { return KindPlain{} }
+  }
+}
+
+func duneToLibrary(dune DuneLib) Library {
+  return Library{
+    Slug: dune.Name,
+    Name: generateLibraryName(dune.Name),
+    Modules: modulesWithSelectOutputs(dune.Modules, dune.Libraries),
+    Opts: dune.Flags,
+    DepsOpam: opamDeps(dune.Libraries),
+    Choices: duneChoices(dune.Libraries),
+    Auto: dune.Auto,
+    Wrapped: dune.Wrapped,
+    Kind: dunePpx(dune.Preprocess, dune.Wrapped),
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -440,60 +629,11 @@ func generateLibraryName(dir string) string {
 func targetNames(deps []string) []string {
   var result []string
   for _, dep := range deps { result = append(result, ":" + dep) }
+  sort.Strings(deps)
   return result
 }
 
 func sigTarget(src Source) string { return src.Name + "_sig" }
-
-func ppxName(libName string) string { return "ppx_" + libName }
-
-func genRule(kind string, name string, deps []string) *rule.Rule {
-  r := rule.NewRule(kind, name)
-  if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  return r
-}
-
-func moduleRule(libName string, src Source, deps []string, ppx bool, ppx_libs []string) *rule.Rule {
-  rulename := "ocaml_module"
-  if ppx { rulename = "ppx_module" }
-  r := genRule(rulename, src.Name, deps)
-  r.SetAttr("struct", ":" + src.Name + ".ml")
-  if src.Intf { r.SetAttr("sig", ":" + sigTarget(src)) }
-  if len(ppx_libs) > 0 {
-    r.SetAttr("ppx", ":" + ppxName(libName))
-    r.SetAttr("ppx_print", "@ppx//print:text")
-  }
-  return r
-}
-
-func signatureRule(src Source, deps []string) *rule.Rule {
-  r := genRule("ocaml_signature", sigTarget(src), deps)
-  r.SetAttr("src", ":" + src.Name + ".mli")
-  return r
-}
-
-func libraryDep(src Source) string { return ":" + src.Name }
-
-func libraryDeps(sources Deps) []string {
-  var deps []string
-  for src := range sources { deps = append(deps, libraryDep(src)) }
-  sort.Strings(deps)
-  return deps
-}
-
-func libraryRuleFor(name string, modules []string, auto bool, ppx bool) *rule.Rule {
-  rulename := "ocaml_ns_library"
-  if ppx { rulename = "ppx_ns_library" }
-  r := rule.NewRule(rulename, name)
-  r.SetAttr("visibility", []string{"//visibility:public"})
-  r.SetAttr("submodules", modules)
-  if auto { r.AddComment("# okapi:auto") }
-  return r
-}
-
-func libraryRule(name string, sources Deps, ppx bool) *rule.Rule {
-  return libraryRuleFor(name, libraryDeps(sources, ), false, ppx)
-}
 
 func resultForRules(rules []*rule.Rule) language.GenerateResult {
   var imports []interface{}
@@ -505,119 +645,33 @@ func resultForRules(rules []*rule.Rule) language.GenerateResult {
   }
 }
 
-func sigModRules(libName string, src Source, deps []string, ppx bool, ppx_libs []string) []*rule.Rule {
-  sort.Strings(deps)
-  var rules []*rule.Rule
-  if src.Intf { rules = append(rules, signatureRule(src, deps)) }
-  rules = append(rules, moduleRule(libName, src, deps, ppx, ppx_libs))
-  return rules
-}
-
-func sourceRules(libName string, names []string, sources Deps, ppx bool, ppx_libs []string) []*rule.Rule {
-  var rules []*rule.Rule
-  sort.Strings(names)
-  for _, name := range names {
-    for src, deps := range sources {
-      if src.Name == name[1:] {
-        rules = append(rules, sigModRules(libName, src, deps, ppx, ppx_libs)...)
-      }
-    }
-  }
-  return rules
-}
-
-func sourceRulesAuto(libName string, sources Deps) []*rule.Rule {
-  var rules []*rule.Rule
-  var keys []Source
-  for key := range sources { keys = append(keys, key) }
-  sort.Slice(keys, func(i, j int) bool { return keys[i].Name < keys[j].Name })
-  for _, src := range keys {
-    deps := sources[src]
-    rules = append(rules, sigModRules(libName, src, deps, false, nil)...)
-  }
-  return rules
-}
-
-func ppxExecutable(name string, deps []string) *rule.Rule {
-  r := rule.NewRule("ppx_executable", ppxName(name))
-  r.SetAttr("deps_opam", deps)
-  r.SetAttr("main", "@obazl_rules_ocaml//dsl:ppx_driver")
-  return r
-}
-
 func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
-  return append(sourceRulesAuto(name, sources), libraryRule(name, sources, false))
-}
-
-func duneLib(sources Deps, dune DuneLib) []*rule.Rule {
-  byName := make(map[string]Source)
-  for src := range sources { byName[src.Name] = src }
-  var rules []*rule.Rule
-  modules := filterSelects(dune.Modules, dune.Libraries)
-  if dune.Ppx {
-    rules = append(rules, ppxExecutable(dune.Name, dune.Preprocess))
+  var keys []string
+  for key := range sources { keys = append(keys, key) }
+  sort.Strings(keys)
+  lib := Library{
+    Slug: name,
+    Name: generateLibraryName(name),
+    Modules: keys,
+    Opts: nil,
+    DepsOpam: nil,
+    Choices: nil,
+    Auto: true,
+    Wrapped: false,
+    Kind: KindNs{},
   }
-  for _, name := range modules {
-    src, srcExists := byName[name]
-    if !srcExists { src = Source{name, false} }
-    deps := sources[src]
-    if src.Intf { rules = append(rules, duneAttrs(signatureRule(src, deps), dune)) }
-    rules = append(rules, duneAttrs(moduleRule(dune.Name, src, deps, dune.Ppx, dune.Preprocess), dune))
-  }
-  return append(rules, libraryRuleFor(generateLibraryName(dune.Name), modules, dune.Auto, dune.Ppx))
-}
-
-func singleDuneLib(sources Deps, dune DuneLib) []*rule.Rule {
-  var modules []string
-  for src := range sources { modules = append(modules, src.Name) }
-  dune.Modules = modules
-  return duneLib(sources, dune)
-}
-
-func duneLibsWithAuto(sources Deps, auto DuneLib, concrete []DuneLib) []*rule.Rule {
-  var autoModules []string
-  for src := range sources {
-    auto := true
-    for _, lib := range concrete {
-      for _, mod := range lib.Modules {
-        if mod == src.Name { auto = false }
-      }
-    }
-    if auto { autoModules = append(autoModules, src.Name) }
-  }
-  auto.Modules = autoModules
-  rules := duneLib(sources, auto)
-  for _, lib := range concrete { rules = append(rules, duneLib(sources, lib)...) }
-  return rules
-}
-
-func duneLibsWithoutAuto(sources Deps, libs []DuneLib) []*rule.Rule {
-  var rules []*rule.Rule
-  for _, lib := range libs { rules = append(rules, duneLib(sources, lib)...) }
-  return rules
+  return library(sources, lib)
 }
 
 func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule {
   conf := parseDune(duneCode)
-  libs := DecodeDuneConfig(name, conf)
-  if len(libs) == 0 { return nil }
-  if len(libs) == 1 { return singleDuneLib(sources, libs[0]) }
-  hasAutoLib := false
-  var autoLib DuneLib
-  var concreteLibs []DuneLib
-  for _, lib := range libs {
-    if len(lib.Modules) == 0 {
-      hasAutoLib = true
-      autoLib = lib
-    } else {
-      concreteLibs = append(concreteLibs, lib)
-    }
+  duneLibs := DecodeDuneConfig(name, conf)
+  var libs []Library
+  for _, dune := range duneLibs {
+    libs = append(libs, duneToLibrary(dune))
   }
-  if hasAutoLib {
-    return duneLibsWithAuto(sources, autoLib, concreteLibs)
-  } else {
-    return duneLibsWithoutAuto(sources, libs)
-  }
+  auto := autoModules(libs, sources)
+  return multilib(libs, sources, auto)
 }
 
 func GenerateRules(name string, sources Deps, dune string) []*rule.Rule {
@@ -625,9 +679,9 @@ func GenerateRules(name string, sources Deps, dune string) []*rule.Rule {
 }
 
 var EmptyResult = language.GenerateResult{
-  Gen: []*rule.Rule{},
-  Empty: []*rule.Rule{},
-  Imports: []interface{}{},
+  Gen: nil,
+  Empty: nil,
+  Imports: nil,
 }
 
 func tags(r *rule.Rule) []string {
@@ -640,67 +694,81 @@ func tags(r *rule.Rule) []string {
   return tags
 }
 
-func findAutoLib(libs []*rule.Rule) (*rule.Rule, []*rule.Rule) {
-  var auto *rule.Rule
-  var nonAuto []*rule.Rule
-  for _, lib := range libs {
-    if contains("auto", tags(lib)) { auto = lib } else { nonAuto = append(nonAuto, lib) }
-  }
-  return auto, nonAuto
-}
-
+// Update an existing build that has been manually amended by the user to contain more than one library.
+// In that case, all submodule assignments are static, and only the module/signature rules are updated.
 // TODO when `select` directives are used from dune, they don't create module rules for the choices.
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
-func multilibWithoutAuto(libs []*rule.Rule, sources Deps) []*rule.Rule {
+func multilib(libs []Library, sources Deps, auto []string) []*rule.Rule {
   var rules []*rule.Rule
-  for _, r := range libs {
-    sub := r.AttrStrings("submodules")
-    ppx := r.Kind() == "ppx_ns_library"
-    rules = append(rules, sourceRules(r.Name(), sub, sources, ppx, nil)...)
+  for _, lib := range libs {
+    if lib.Auto { lib.Modules = append(lib.Modules, auto...) }
+    rules = append(rules, library(sources, lib)...)
   }
   return rules
 }
 
-func multilibWithAuto(auto *rule.Rule, nonAuto []*rule.Rule, sources Deps) []*rule.Rule {
-  var rules []*rule.Rule
-  var nonAutoModules map[string]bool
-  for _, r := range nonAuto {
-    sub := r.AttrStrings("submodules")
-    ppx := r.Kind() == "ppx_ns_library"
-    rules = append(rules, sourceRules(r.Name(), sub, sources, ppx, nil)...)
-    for _, mod := range sub { nonAutoModules[mod[1:]] = true }
-  }
-  var autoSources Deps
-  for src, deps := range sources {
-    if !nonAutoModules[src.Name] { autoSources[src] = deps }
-  }
-  return append(rules, sourceRulesAuto(auto.Name(), autoSources)...)
+// TODO need to fill in the deps somewhere after parsing, by looking for the corresponding ppx_executable
+// maybe that can even be skipped by passing around a flag `UpdateMode` and not emitting a ppx_executable when true,
+// since it would just generate the identical rule again.
+var libKinds = map[string]Kind {
+  "ocaml_ns_library": KindNs{},
+  "ppx_ns_library": KindNsPpx{},
+  "ocaml_library": KindPlain{},
+  "ppx_library": KindPpx{},
 }
 
-// Update an existing build that has been manually amended by the user to contain more than one library.
-// In that case, all submodule assignments are static, and only the module/signature rules are updated.
-func Multilib(libs []*rule.Rule, sources Deps) []*rule.Rule {
-  auto, nonAuto := findAutoLib(libs)
-  if auto == nil {
-    return multilibWithoutAuto(libs, sources)
-  } else {
-    return multilibWithAuto(auto, nonAuto, sources)
+func slug(name string) string {
+  rex := regexp.MustCompile("#([[:upper:]])(.*)")
+  match := rex.FindStringSubmatch(name)
+  if len(match) != 2 { log.Fatal("Library name " + name + " couldn't be parsed.'") }
+  return strings.ToLower(match[0]) + match[1]
+}
+
+func removeColon(name string) string {
+  if name[:1] == ":" { return name[1:] } else {return name}
+}
+
+// TODO this uses only the `deps` names that correspond to existing source files.
+// It should also consider generated sources, like from selects and manual rules.
+// Probably needs to scan existing module rules as well.
+// TODO general question about attrs like opts and deps_opam: is it more sensible to leave these nil when updating,
+// since they get merged anyway?
+// TODO `deps` is wrong, this needs to use `submodules` or `modules` (`kind.moduleAttr`)
+func existingLibrary(r *rule.Rule, sources Deps) (Library, bool) {
+  if kind, isLib := libKinds[r.Name()]; isLib {
+    var modules []string
+    for _, name := range r.AttrStrings("deps") {
+      clean := removeColon(name)
+      if _, exists := sources[clean]; exists { modules = append(modules, clean) }
+    }
+    lib := Library{
+      Slug: slug(r.Name()),
+      Name: r.Name(),
+      Modules: modules,
+      Opts: nil,
+      DepsOpam: nil,
+      Choices: nil,
+      Auto: contains("auto", tags(r)),
+      Wrapped: kind.wrapped(),
+      Kind: kind,
+    }
+    return lib, true
   }
+  return Library{}, false
+}
+
+func existingLibraries(rules []*rule.Rule, sources Deps) ([]Library, []string) {
+  var libs []Library
+  for _, r := range rules {
+    if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }
+  }
+  return libs, autoModules(libs, sources)
 }
 
 func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []*rule.Rule {
-  var libs []*rule.Rule
-  for _, r := range rules {
-    if r.Kind() == "ocaml_ns_library" { libs = append(libs, r) }
-  }
-  if len(libs) == 1 {
-    return GenerateRulesAuto(libs[0].Name(), sources)
-  } else if len(libs) > 1 {
-    return Multilib(libs, sources)
-  } else {
-    return nil
-  }
+  libs, auto := existingLibraries(rules, sources)
+  return multilib(libs, sources, auto)
 }
 
 // -----------------------------------------------------------------------------
@@ -737,14 +805,18 @@ var defaultKind = rule.KindInfo{
   MatchAttrs: []string{},
   NonEmptyAttrs: map[string]bool{},
   SubstituteAttrs: map[string]bool{},
-  MergeableAttrs: map[string]bool{"submodules": true},
+  MergeableAttrs: map[string]bool{"submodules": true, "modules": true},
   ResolveAttrs: map[string]bool{},
 }
 
 var kinds = map[string]rule.KindInfo {
+  "ppx_module": defaultKind,
   "ocaml_module": defaultKind,
   "ocaml_signature": defaultKind,
+  "ppx_ns_library": defaultKind,
+  "ppx_library": defaultKind,
   "ocaml_ns_library": defaultKind,
+  "ocaml_library": defaultKind,
 }
 
 func (*okapiLang) Kinds() map[string]rule.KindInfo { return kinds }
@@ -761,7 +833,7 @@ func (*okapiLang) Loads() []rule.LoadInfo {
         "ocaml_signature",
         "ppx_executable",
       },
-      After: []string{},
+      After: nil,
     },
   }
 }
@@ -774,14 +846,19 @@ func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolv
 
 func (*okapiLang) Embeds(r *rule.Rule, from label.Label) []label.Label { return nil }
 
-func (*okapiLang) Resolve(c *config.Config, ix *resolve.RuleIndex, rc *repo.RemoteCache, r *rule.Rule, imports interface{}, from label.Label) {
+func (*okapiLang) Resolve(
+  c *config.Config,
+  ix *resolve.RuleIndex,
+  rc *repo.RemoteCache,
+  r *rule.Rule,
+  imports interface{},
+  from label.Label,
+) {
 }
 
 func containsLibrary(rules []*rule.Rule) bool {
   for _, r := range rules {
-    if r.Kind() == "ocaml_ns_library" {
-      return true
-    }
+    if _, isLib := libKinds[r.Kind()]; isLib { return true }
   }
   return false
 }
@@ -798,7 +875,7 @@ func generateIfOcaml(args language.GenerateArgs) []*rule.Rule {
     ext := filepath.Ext(file)
     if ext == ".ml" || ext == ".mli" {
       return GenerateRules(
-        generateLibraryName(args.Dir),
+        args.Dir,
         Dependencies(args.Dir, args.RegularFiles),
         findDune(args.Dir, args.RegularFiles),
       )
@@ -816,9 +893,5 @@ func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateRes
     rules = generateIfOcaml(args)
   }
   for range rules { imports = append(imports, 0) }
-  return language.GenerateResult{
-    Gen: rules,
-    Empty: []*rule.Rule{},
-    Imports: imports,
-  }
+  return resultForRules(rules)
 }

@@ -1,12 +1,13 @@
 package bazel_test
 
 import (
-  "io/ioutil"
-  "path/filepath"
-  "strings"
-  "testing"
+	"io/ioutil"
+	"log"
+	"path/filepath"
+	"strings"
+	"testing"
 
-  "github.com/bazelbuild/rules_go/go/tools/bazel_testing"
+	"github.com/bazelbuild/rules_go/go/tools/bazel_testing"
 )
 
 var testArgs = bazel_testing.Args{
@@ -88,11 +89,15 @@ const aBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module"
 ocaml_signature(
     name = "a2_sig",
     src = ":a2.mli",
+    deps_opam = [],
+    opts = [],
     deps = [":f1"],
 )
 
 ocaml_module(
     name = "a2",
+    deps_opam = [],
+    opts = [],
     sig = ":a2_sig",
     struct = ":a2.ml",
     deps = [":f1"],
@@ -100,6 +105,8 @@ ocaml_module(
 
 ocaml_module(
     name = "a3",
+    deps_opam = [],
+    opts = [],
     struct = ":a3.ml",
     deps = [
         ":a2",
@@ -110,14 +117,19 @@ ocaml_module(
 ocaml_signature(
     name = "f1_sig",
     src = ":f1.mli",
+    deps_opam = [],
+    opts = [],
 )
 
 ocaml_module(
     name = "f1",
+    deps_opam = [],
+    opts = [],
     sig = ":f1_sig",
     struct = ":f1.ml",
 )
 
+# okapi:auto
 ocaml_ns_library(
     name = "#A",
     submodules = [
@@ -173,8 +185,8 @@ ppx_module(
 ppx_ns_library(
     name = "#Sub_lib",
     submodules = [
-        "final",
-        "sub",
+        ":final",
+        ":sub",
     ],
     visibility = ["//visibility:public"],
 )
@@ -196,8 +208,8 @@ ocaml_module(
 ocaml_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
-        "foo",
-        "bar",
+        ":foo",
+        ":bar",
     ],
     visibility = ["//visibility:public"],
 )
@@ -209,6 +221,7 @@ func checkFile(t *testing.T, ws string, target string, path... string) {
   bytes, err1 := ioutil.ReadFile(file)
   if err1 != nil { t.Fatal(err1) }
   content := string(bytes)
+  log.Print(content)
   if content != target { t.Fatal(rel + " doesn't match:\n" + content) }
 }
 

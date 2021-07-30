@@ -14,20 +14,6 @@ ocaml_module(
     struct = ":final.ml",
 )
 
-ocaml_module(
-    name = "sub",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    struct = ":sub.ml",
-)
-
 ocaml_signature(
     name = "new_sig",
     src = ":new.mli",
@@ -57,14 +43,25 @@ ocaml_module(
     struct = ":new.ml",
 )
 
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
+)
+
 # okapi:auto
 ocaml_ns_library(
     name = "#Sub_lib",
     submodules = [
-        ":bar",
-        ":choice1",
-        ":choice2",
-        ":foo",
+        ":final",
         ":new",
         ":sub",
     ],
@@ -82,6 +79,8 @@ ocaml_signature(
     src = ":foo.mli",
     deps_opam = [],
     opts = [],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
 )
 
 ppx_module(
@@ -106,18 +105,8 @@ ppx_module(
 ppx_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
-        "foo",
-        "bar",
+        ":foo",
+        ":bar",
     ],
     visibility = ["//visibility:public"],
-)
-
-ocaml_module(
-    name = "choice1",
-    struct = ":choice1.ml",
-)
-
-ocaml_module(
-    name = "choice2",
-    struct = ":choice2.ml",
 )

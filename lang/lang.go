@@ -1,11 +1,8 @@
 package okapi
 
 import (
-  "encoding/json"
   "flag"
-  "io/ioutil"
   "log"
-  "os/exec"
   "path/filepath"
   "regexp"
   "sort"
@@ -18,94 +15,6 @@ import (
   "github.com/bazelbuild/bazel-gazelle/resolve"
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
-
-// -----------------------------------------------------------------------------
-// Codept
-// -----------------------------------------------------------------------------
-
-type CodeptDep struct {
-  File string
-  Deps [][]string
-}
-
-type CodeptLocal struct {
-  Module []string
-  Ml string
-  Mli string
-}
-
-type Codept struct {
-  Dependencies []CodeptDep
-  Local []CodeptLocal
-}
-
-type Source struct {
-  Name string
-  Intf bool
-  Deps []string
-}
-
-type Deps = map[string]Source
-
-func depName(file string) string {
-  return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
-}
-
-func consSource(name string, sigs map[string][]string, deps []string) Source {
-  _, intf := sigs[name]
-  return Source{
-    Name: name,
-    Intf: intf,
-    Deps: deps,
-  }
-}
-
-func consDeps(dir string, codept Codept) Deps {
-  local := make(map[string]string)
-  sigs := make(map[string][]string)
-  mods := make(map[string][]string)
-  sources := make(Deps)
-  for _, loc := range codept.Local {
-    for _, mod := range loc.Module { local[mod] = depName(loc.Ml) }
-  }
-  for _, src := range codept.Dependencies {
-    if filepath.Dir(src.File) == dir {
-      var deps []string
-      for _, ds := range src.Deps {
-        for _, d := range ds {
-          if local[d] != "" { deps = append(deps, local[d]) }
-        }
-      }
-      name := depName(src.File)
-      if filepath.Ext(src.File) == ".mli" { sigs[name] = deps } else { mods[name] = deps }
-    }
-  }
-  for src, deps := range mods { sources[src] = consSource(src, sigs, deps) }
-  return sources
-}
-
-// While codept is able to scan a directory, there's no way to exclude subdirectories, so files have to be specified
-// explicitly.
-func runCodept(dir string, files []string) []byte {
-  var args = []string{"-native", "-deps"}
-  for _, file := range files {
-    if filepath.Ext(file) == ".ml" || filepath.Ext(file) == ".mli" {
-      args = append(args, dir + "/" + file)
-    }
-  }
-  cmd := exec.Command("codept", args...)
-  out, err := cmd.Output()
-  if err != nil { log.Fatal("codept failed for " + dir + ": " + string(out[:])) }
-  return out
-}
-
-func Dependencies(dir string, files []string) Deps {
-  out := runCodept(dir, files)
-  var codept Codept
-  err := json.Unmarshal(out, &codept)
-  if err != nil { log.Fatal("Parsing codept output for " + dir + ":\n" + err.Error() + "\n" + string(out[:])) }
-  return consDeps(dir, codept)
-}
 
 // -----------------------------------------------------------------------------
 // Library
@@ -279,198 +188,6 @@ func autoModules(libs []Library, sources Deps) []string {
 }
 
 // -----------------------------------------------------------------------------
-// Dune
-// -----------------------------------------------------------------------------
-
-type DuneLibDep interface {}
-type DuneLibOpam struct { Name string }
-type DuneLibSelect struct { Choice ModuleChoice }
-
-type DuneLib struct {
-  Name string
-  Modules []string
-  Flags []string
-  Libraries []DuneLibDep
-  Auto bool
-  Wrapped bool
-  Ppx bool
-  Preprocess []string
-}
-
-func parseDune(duneFile string) SexpList {
-  bytes, _ := ioutil.ReadFile(duneFile)
-  code := string(bytes[:])
-  items := parseSexp(code)
-  var result []SexpNode
-  for _, node := range items {
-    if l, isList := node.(SexpList); isList {
-      result = append(result, sexpMap(l.Sub))
-    } else {
-      log.Fatalf("top level dune item is not a list: %#v", node)
-    }
-  }
-  return SexpList{result}
-}
-
-func DuneList(name string, attr string, dune SexpMap) []string {
-  var result []string
-  raw := dune.Values[attr]
-  if raw != nil {
-    items, err := sexpStrings(raw)
-    if err != nil { log.Fatalf("dune library %s: attr " + attr + " is not a list of strings: %s: %#v", name, err, raw) }
-    // TODO this is an exclude directive
-    // if item[:2] == []string{":standard", "\\"}
-    for _, item := range items {
-      if item[:1] != ":" { result = append(result, item) }
-    }
-  }
-  return result
-}
-
-func duneLibraryDeps(libName string, dune SexpMap) []DuneLibDep {
-  var deps []DuneLibDep
-  raw := dune.Values["libraries"]
-  selectString := SexpString{"select"}
-  if raw != nil {
-    entries, err := raw.List()
-    if err != nil { log.Fatalf("library %s: invalid libraries field: %#v; %s", libName, raw, err) }
-    for _, entry := range entries {
-      s, err := entry.String()
-      if err == nil {
-        deps = append(deps, DuneLibOpam{s})
-      } else {
-        sel, err := entry.List()
-        if err != nil { log.Fatalf("library %s: unparsable libraries entry: %#v; %s", libName, sel, err) }
-        if len(sel) > 3 && sel[0] == selectString {
-          var alts []ModuleAlt
-          for _, alt := range sel[3:] {
-            ss, err := sexpStrings(alt)
-            if err == nil && len(ss) == 2 && ss[0] == "->" { alts = append(alts, ModuleAlt{"", ss[1]}) } else
-            if err == nil && len(ss) == 3 && ss[1] == "->" { alts = append(alts, ModuleAlt{ss[0], ss[2]}) } else {
-              log.Fatalf("library %s: unparsable select alternative: %#v; %s", libName, alt, err)
-            }
-          }
-          final, err := sel[1].String()
-          if err != nil { log.Fatalf("library %s: invalid type for select file name: %#v; %s", libName, sel, err) }
-          deps = append(deps, DuneLibSelect{ModuleChoice{final, alts}})
-        }
-      }
-    }
-  }
-  return deps
-}
-
-func dunePreprocessors(libName string, dune SexpMap) []string {
-  var result []string
-  raw := dune.Values["preprocess"]
-  if raw != nil {
-    if items, err := raw.List(); err == nil {
-      for _, item := range items {
-        elems, err := item.List()
-        pps := SexpString{"pps"}
-        if err == nil && len(elems) == 2 && elems[0] == pps {
-          pp, stringErr := elems[1].String()
-          if stringErr != nil { log.Fatalf("dune library %s: pps is not a string: %#v", libName, elems[1]) }
-          result = append(result, pp)
-        }
-      }
-    } else {
-      log.Printf("dune library %s: Warning: invalid `preprocess` directive: %#v", libName, raw)
-    }
-  }
-  return result
-}
-
-func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
-  var libraries []DuneLib
-  for _, node := range conf.Sub {
-    dune, isMap := node.(SexpMap)
-    if isMap && dune.Name == "library" {
-      nameRaw, nameRawErr := dune.Values["name"]
-      if !nameRawErr { log.Fatalf("dune library %s: no name attribute", libName) }
-      name, nameErr := nameRaw.String()
-      if nameErr != nil { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
-      wrapped := dune.Values["wrapped"] != SexpString{"false"}
-      modules := DuneList(libName, "modules", dune)
-      preproc := dunePreprocessors(libName, dune)
-      lib := DuneLib{
-        Name: name,
-        Modules: modules,
-        Flags: DuneList(libName, "flags", dune),
-        Libraries: duneLibraryDeps(libName, dune),
-        Auto: len(modules) == 0,
-        Wrapped: wrapped,
-        Ppx: len(preproc) > 0,
-        Preprocess: preproc,
-      }
-      libraries = append(libraries, lib)
-    }
-  }
-  return libraries
-}
-
-func contains(target string, items []string) bool {
-  for _, item := range items {
-    if target == item {return true}
-  }
-  return false
-}
-
-func modulesWithSelectOutputs(modules []string, libs []DuneLibDep) []string {
-  var result []string
-  var alts []string
-  for _, lib := range libs {
-    if sel, isSel := lib.(DuneLibSelect); isSel {
-      result = append(result, depName(sel.Choice.Out))
-      for _, alt := range sel.Choice.Alts { alts = append(alts, depName(alt.Choice)) }
-    }
-  }
-  for _, lib := range modules { if !contains(lib, alts) { result = append(result, lib) } }
-  return result
-}
-
-func duneChoices(libs []DuneLibDep) []ModuleChoice {
-  var choices []ModuleChoice
-  for _, dep := range libs {
-    if sel, isSel := dep.(DuneLibSelect); isSel { choices = append(choices, sel.Choice) }
-  }
-  return choices
-}
-
-func opamDeps(deps []DuneLibDep) []string {
-  var result []string
-  for _, dep := range deps {
-    ld, isOpam := dep.(DuneLibOpam)
-    if isOpam { result = append(result, ld.Name) }
-  }
-  return result
-}
-
-func dunePpx(deps []string, wrapped bool) Kind {
-  ppx := false
-  if len(deps) > 0 { ppx = true }
-  if wrapped {
-    if ppx { return KindNsPpx{PpxDirect{deps}} } else { return KindNs{} }
-  } else {
-    if ppx { return KindPpx{PpxDirect{deps}} } else { return KindPlain{} }
-  }
-}
-
-func duneToLibrary(dune DuneLib) Library {
-  return Library{
-    Slug: dune.Name,
-    Name: generateLibraryName(dune.Name),
-    Modules: modulesWithSelectOutputs(dune.Modules, dune.Libraries),
-    Opts: dune.Flags,
-    DepsOpam: opamDeps(dune.Libraries),
-    Choices: duneChoices(dune.Libraries),
-    Auto: dune.Auto,
-    Wrapped: dune.Wrapped,
-    Kind: dunePpx(dune.Preprocess, dune.Wrapped),
-  }
-}
-
-// -----------------------------------------------------------------------------
 // Rules
 // -----------------------------------------------------------------------------
 
@@ -516,7 +233,7 @@ func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
 }
 
 func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule {
-  conf := parseDune(duneCode)
+  conf := parseDuneFile(duneCode)
   duneLibs := DecodeDuneConfig(name, conf)
   var libs []Library
   for _, dune := range duneLibs {
@@ -713,13 +430,6 @@ func containsLibrary(rules []*rule.Rule) bool {
     if _, isLib := libKinds[r.Kind()]; isLib { return true }
   }
   return false
-}
-
-func findDune(dir string, files []string) string {
-  for _, f := range files {
-    if f == "dune" { return filepath.Join(dir, f) }
-  }
-  return ""
 }
 
 func generateIfOcaml(args language.GenerateArgs) []*rule.Rule {

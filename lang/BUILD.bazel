@@ -3,6 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "lang",
     srcs = [
+        "codept.go",
+        "dune.go",
         "lang.go",
         "sexp.go",
     ],
@@ -24,7 +26,10 @@ go_library(
 
 go_test(
     name = "lang_test",
-    srcs = ["sexp_test.go"],
+    srcs = [
+        "sexp_test.go",
+        "dune_test.go",
+    ],
     embed = [":lang"],
 )
 
@@ -35,6 +40,7 @@ filegroup(
         "BUILD.bazel",
         "lang.go",
         "sexp_test.go",
+        "dune_test.go",
     ],
     visibility = ["//visibility:public"],
 )

@@ -12,7 +12,7 @@ import (
 )
 
 func generateLibraryName(dir string) string {
-  return "#" + strings.ReplaceAll(strings.Title(filepath.Base(dir)), "-", "_")
+  return "#" + strings.Title(strings.ReplaceAll(filepath.Base(dir), "-", "_"))
 }
 
 func GenerateRulesAuto(name string, sources Deps) []RuleResult {

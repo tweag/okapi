@@ -50,7 +50,7 @@ func (s SexpString) String() (string, error) {
 }
 
 type SexpEmpty struct {}
-func (s SexpEmpty) List() ([]SexpNode, error) { return nil, SexpError{"SexpEmpty cannot be converted to list"} }
+func (s SexpEmpty) List() ([]SexpNode, error) { return nil, nil }
 func (s SexpEmpty) String() (string, error) { return "", SexpError{"SexpEmpty cannot be converted to string"} }
 
 func consSexpList(nodes... SexpNode) SexpNode { return SexpList{nodes} }

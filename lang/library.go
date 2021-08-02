@@ -123,7 +123,7 @@ type RuleResult struct {
 func targetNames(deps []string) []string {
   var result []string
   for _, dep := range deps { result = append(result, ":" + dep) }
-  sort.Strings(deps)
+  sort.Strings(result)
   return result
 }
 

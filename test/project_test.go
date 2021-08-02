@@ -154,6 +154,7 @@ ppx_module(
         "angstrom",
         "re",
         "ipaddr",
+        "ppx_inline_test",
     ],
     opts = [
         "-open",
@@ -161,6 +162,7 @@ ppx_module(
     ],
     ppx = ":ppx_sub_lib",
     ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
     struct = ":final.ml",
 )
 
@@ -170,6 +172,7 @@ ppx_module(
         "angstrom",
         "re",
         "ipaddr",
+        "ppx_inline_test",
     ],
     opts = [
         "-open",
@@ -177,6 +180,7 @@ ppx_module(
     ],
     ppx = ":ppx_sub_lib",
     ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
     struct = ":sub.ml",
 )
 

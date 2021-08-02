@@ -211,8 +211,8 @@ ocaml_module(
 ocaml_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
-        ":foo",
         ":bar",
+        ":foo",
     ],
     visibility = ["//visibility:public"],
 )

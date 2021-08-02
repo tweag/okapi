@@ -17,15 +17,17 @@ type ModuleChoice struct {
 }
 
 type PpxKind interface {
-  exe(name string) []*rule.Rule
+  exe(name string) []RuleResult
   inlineTest() bool
   depsOpam() []string
 }
 type PpxTransitive struct {}
 type PpxDirect struct { deps []string }
 
-func (ppx PpxDirect) exe(slug string) []*rule.Rule { return []*rule.Rule{ppxExecutable(slug, ppx.deps)} }
-func (PpxTransitive) exe(string) []*rule.Rule { return nil }
+func (ppx PpxDirect) exe(slug string) []RuleResult {
+  return []RuleResult{{ppxExecutable(slug, ppx.deps), nil}}
+}
+func (PpxTransitive) exe(string) []RuleResult { return nil }
 
 func (ppx PpxDirect) inlineTest() bool { return contains("ppx_inline_test", ppx.deps) }
 func (PpxTransitive) inlineTest() bool { return false }
@@ -39,7 +41,7 @@ type Kind interface {
   moduleAttr() string
   depsOpam() []string
   addAttrs(slug string, r *rule.Rule) *rule.Rule
-  extraRules(name string) []*rule.Rule
+  extraRules(name string) []RuleResult
   wrapped() bool
 }
 
@@ -91,10 +93,10 @@ func ppxExecutable(name string, deps []string) *rule.Rule {
   return r
 }
 
-func (k KindNsPpx) extraRules(slug string) []*rule.Rule { return k.ppx.exe(slug) }
-func (KindNs) extraRules(string) []*rule.Rule { return nil }
-func (k KindPpx) extraRules(slug string) []*rule.Rule { return k.ppx.exe(slug) }
-func (KindPlain) extraRules(string) []*rule.Rule { return nil }
+func (k KindNsPpx) extraRules(slug string) []RuleResult { return k.ppx.exe(slug) }
+func (KindNs) extraRules(string) []RuleResult { return nil }
+func (k KindPpx) extraRules(slug string) []RuleResult { return k.ppx.exe(slug) }
+func (KindPlain) extraRules(string) []RuleResult { return nil }
 
 func (KindNsPpx) wrapped() bool { return true }
 func (KindNs) wrapped() bool { return true }
@@ -113,6 +115,11 @@ type Library struct {
   Kind Kind
 }
 
+type RuleResult struct {
+  rule *rule.Rule
+  deps []string
+}
+
 func targetNames(deps []string) []string {
   var result []string
   for _, dep := range deps { result = append(result, ":" + dep) }
@@ -120,11 +127,12 @@ func targetNames(deps []string) []string {
   return result
 }
 
-func commonAttrs(lib Library, r *rule.Rule, deps []string) *rule.Rule {
-  r.SetAttr("deps_opam", append(lib.DepsOpam, lib.Kind.depsOpam()...))
+func commonAttrs(lib Library, r *rule.Rule, deps []string) RuleResult {
+  libDeps := append(lib.DepsOpam, lib.Kind.depsOpam()...)
+  // r.SetAttr("deps_opam", append(lib.DepsOpam, lib.Kind.depsOpam()...))
   r.SetAttr("opts", lib.Opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  return lib.Kind.addAttrs(lib.Slug, r)
+  return RuleResult{lib.Kind.addAttrs(lib.Slug, r), libDeps}
 }
 
 func sigTarget(src Source) string { return src.Name + "_sig" }
@@ -142,8 +150,8 @@ func libModuleRule(lib Library, src Source) *rule.Rule {
   return r
 }
 
-func libSourceRules(sources Deps, lib Library) []*rule.Rule {
-  var rules []*rule.Rule
+func libSourceRules(sources Deps, lib Library) []RuleResult {
+  var rules []RuleResult
   rules = append(rules, lib.Kind.extraRules(lib.Slug)...)
   for _, name := range lib.Modules {
     src, srcExists := sources[name]
@@ -159,14 +167,14 @@ func setLibraryModules(lib Library, r *rule.Rule) {
   r.SetAttr("visibility", []string{"//visibility:public"})
 }
 
-func libraryRule(lib Library) *rule.Rule {
+func libraryRule(lib Library) RuleResult {
   r := rule.NewRule(lib.Kind.libraryRuleName(), lib.Name)
   setLibraryModules(lib, r)
   if lib.Auto { r.AddComment("# okapi:auto") }
-  return r
+  return RuleResult{r, nil}
 }
 
-func library(sources Deps, lib Library) []*rule.Rule {
+func library(sources Deps, lib Library) []RuleResult {
   return append(libSourceRules(sources, lib), libraryRule(lib))
 }
 
@@ -175,8 +183,8 @@ func library(sources Deps, lib Library) []*rule.Rule {
 // TODO when `select` directives are used from dune, they don't create module rules for the choices.
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
-func multilib(libs []Library, sources Deps, auto []string) []*rule.Rule {
-  var rules []*rule.Rule
+func multilib(libs []Library, sources Deps, auto []string) []RuleResult {
+  var rules []RuleResult
   for _, lib := range libs {
     if lib.Auto { lib.Modules = append(lib.Modules, auto...) }
     rules = append(rules, library(sources, lib)...)

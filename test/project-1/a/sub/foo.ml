@@ -1,3 +1,5 @@
+open Bar
+
 module Foo = struct
-  let sub a = a
+  let sub a = Bar.sub a
 end

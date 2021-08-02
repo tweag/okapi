@@ -58,6 +58,7 @@ end
 (library
  (name sub_extra_lib)
  (public_name sub-extra-lib)
+ (libraries a)
  (modules foo bar))
 -- a/sub/bar.ml --
 module Bar = struct
@@ -66,8 +67,9 @@ end
 -- a/sub/choice1.ml --
 -- a/sub/choice2.ml --
 -- a/sub/foo.ml --
+open Bar
 module Foo = struct
-  let sub a = a
+  let sub a = Bar.sub a
 end
 -- a/sub/sub.ml --
 module Sub = struct
@@ -88,14 +90,12 @@ const aBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module"
 ocaml_signature(
     name = "a2_sig",
     src = ":a2.mli",
-    deps_opam = [],
     opts = [],
     deps = [":f1"],
 )
 
 ocaml_module(
     name = "a2",
-    deps_opam = [],
     opts = [],
     sig = ":a2_sig",
     struct = ":a2.ml",
@@ -104,7 +104,6 @@ ocaml_module(
 
 ocaml_module(
     name = "a3",
-    deps_opam = [],
     opts = [],
     struct = ":a3.ml",
     deps = [
@@ -116,13 +115,11 @@ ocaml_module(
 ocaml_signature(
     name = "f1_sig",
     src = ":f1.mli",
-    deps_opam = [],
     opts = [],
 )
 
 ocaml_module(
     name = "f1",
-    deps_opam = [],
     opts = [],
     sig = ":f1_sig",
     struct = ":f1.ml",
@@ -196,16 +193,19 @@ ppx_ns_library(
 
 ocaml_module(
     name = "foo",
-    deps_opam = [],
     opts = [],
     struct = ":foo.ml",
+    deps = [
+        ":bar",
+        "//a:#A",
+    ],
 )
 
 ocaml_module(
     name = "bar",
-    deps_opam = [],
     opts = [],
     struct = ":bar.ml",
+    deps = ["//a:#A"],
 )
 
 ocaml_ns_library(

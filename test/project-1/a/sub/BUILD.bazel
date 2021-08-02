@@ -77,29 +77,41 @@ ppx_executable(
 ocaml_signature(
     name = "foo_sig",
     src = ":foo.mli",
-    deps_opam = [],
+    deps_opam = ["ppx_inline_test"],
     opts = [],
     ppx = ":ppx_sub_extra_lib",
     ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
+    deps = [
+        ":bar",
+        "@okapi-test//a:#A",
+    ],
 )
 
 ppx_module(
     name = "foo",
-    deps_opam = [],
+    deps_opam = ["ppx_inline_test"],
     opts = [],
     ppx = ":ppx_sub_extra_lib",
     ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
     sig = ":foo_sig",
     struct = ":foo.ml",
+    deps = [
+        ":bar",
+        "@okapi-test//a:#A",
+    ],
 )
 
 ppx_module(
     name = "bar",
-    deps_opam = [],
+    deps_opam = ["ppx_inline_test"],
     opts = [],
     ppx = ":ppx_sub_extra_lib",
     ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
     struct = ":bar.ml",
+    deps = ["@okapi-test//a:#A"],
 )
 
 ppx_ns_library(

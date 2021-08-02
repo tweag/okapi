@@ -15,7 +15,7 @@ func generateLibraryName(dir string) string {
   return "#" + strings.ReplaceAll(strings.Title(filepath.Base(dir)), "-", "_")
 }
 
-func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
+func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
   sort.Strings(keys)
@@ -33,7 +33,7 @@ func GenerateRulesAuto(name string, sources Deps) []*rule.Rule {
   return library(sources, lib)
 }
 
-func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule {
+func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
   conf := parseDuneFile(duneCode)
   duneLibs := DecodeDuneConfig(name, conf)
   var libs []Library
@@ -44,7 +44,7 @@ func GenerateRulesDune(name string, sources Deps, duneCode string) []*rule.Rule 
   return multilib(libs, sources, auto)
 }
 
-func GenerateRules(name string, sources Deps, dune string) []*rule.Rule {
+func GenerateRules(name string, sources Deps, dune string) []RuleResult {
   if dune == "" { return GenerateRulesAuto(name, sources) } else { return GenerateRulesDune(name, sources, dune) }
 }
 
@@ -66,6 +66,22 @@ var libKinds = map[string]Kind {
   "ppx_ns_library": KindNsPpx{},
   "ocaml_library": KindPlain{},
   "ppx_library": KindPpx{},
+}
+
+func isLibrary(r *rule.Rule) bool {
+  _, isLib := libKinds[r.Kind()]
+  return isLib
+}
+
+var sourceKinds = map[string]bool {
+  "ocaml_signature": true,
+  "ocaml_module": true,
+  "ppx_module": true,
+}
+
+func isSource(r *rule.Rule) bool {
+  _, isSrc := sourceKinds[r.Kind()]
+  return isSrc
 }
 
 func slug(name string) string {
@@ -116,7 +132,7 @@ func existingLibraries(rules []*rule.Rule, sources Deps) ([]Library, []string) {
   return libs, autoModules(libs, sources)
 }
 
-func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []*rule.Rule {
+func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []RuleResult {
   libs, auto := existingLibraries(rules, sources)
   return multilib(libs, sources, auto)
 }

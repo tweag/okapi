@@ -142,7 +142,7 @@ ocaml_ns_library(
 If a source directory has no Bazel config, but there is a `dune` file present, the Dune configuration will be used to
 populate the attributes `opts` (from `flags`) and `deps_opam` (from `libraries`).
 
-`select` directives are parsed in order to find the correct module file names for the library, but the selection of the
+`select` stanzas are parsed in order to find the correct module file names for the library, but the selection of the
 correct source file has to be done manually, since there is no (easy) way to check for the presence of dependencies.
 
 Preprocessors are supported as well, causing the addition of a `ppx_executable`, which is then referenced by the
@@ -266,6 +266,13 @@ ocaml_ns_library(
 
 Libraries converted from a Dune config are automatically annotated with this comment if they don't have an explicit
 module list.
+
+# Local Dune Dependencies
+
+Dune allows the `libraries` stanza to be a mix of OPAM dependencies and libraries defined in the current project.
+For Bazel, the two need to be differentiated.
+For this purpose, the Gazelle resolver step examines the depspecs in `libraries` and looks for a matching library rule,
+adding it to the `deps` attribute on success and `deps_opam` otherwise.
 
 [Gazelle]: https://github.com/bazelbuild/bazel-gazelle
 [OBazl]: https://github.com/obazl/rules_ocaml

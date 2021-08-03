@@ -12,6 +12,7 @@ type DuneLibSelect struct { Choice ModuleChoice }
 
 type DuneLib struct {
   Name string
+  PublicName string
   Modules []string
   Flags []string
   Libraries []DuneLibDep
@@ -109,20 +110,40 @@ func dunePreprocessors(libName string, dune SexpMap) []string {
   return result
 }
 
+func decodeDuneName(libName string, dune SexpMap) string {
+  nameRaw, nameRawExists := dune.Values["name"]
+  if !nameRawExists { log.Fatalf("dune library %s: no name attribute", libName) }
+  name, nameErr := nameRaw.String()
+  if nameErr != nil { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
+  return name
+}
+
+func decodeDunePublicName(libName string, dune SexpMap, name string) string {
+  publicNameRaw, publicNameRawExists := dune.Values["public_name"]
+  if publicNameRawExists {
+    publicName, publicNameErr := publicNameRaw.String()
+    if publicNameErr != nil {
+      log.Fatalf("dune library %s: public_name isn't a string: %#v", libName, dune.Values["name"])
+    }
+    return publicName
+  } else {
+    return name
+  }
+}
+
 func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
   var libraries []DuneLib
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
     if isMap && dune.Name == "library" {
-      nameRaw, nameRawErr := dune.Values["name"]
-      if !nameRawErr { log.Fatalf("dune library %s: no name attribute", libName) }
-      name, nameErr := nameRaw.String()
-      if nameErr != nil { log.Fatalf("dune library %s: name isn't a string: %#v", libName, dune.Values["name"]) }
+      name := decodeDuneName(libName, dune)
+      publicName := decodeDunePublicName(libName, dune, name)
       wrapped := dune.Values["wrapped"] != SexpString{"false"}
       modules := DuneList(libName, "modules", dune)
       preproc := dunePreprocessors(libName, dune)
       lib := DuneLib{
         Name: name,
+        PublicName: publicName,
         Modules: modules,
         Flags: DuneList(libName, "flags", dune),
         Libraries: duneLibraryDeps(libName, dune),
@@ -188,6 +209,7 @@ func duneToLibrary(dune DuneLib) Library {
   return Library{
     Slug: dune.Name,
     Name: generateLibraryName(dune.Name),
+    PublicName: dune.PublicName,
     Modules: modulesWithSelectOutputs(dune.Modules, dune.Libraries),
     Opts: dune.Flags,
     DepsOpam: opamDeps(dune.Libraries),

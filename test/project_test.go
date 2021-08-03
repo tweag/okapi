@@ -126,6 +126,7 @@ ocaml_module(
 )
 
 # okapi:auto
+# okapi:public_name a
 ocaml_ns_library(
     name = "#A",
     submodules = [
@@ -182,6 +183,7 @@ ppx_module(
 )
 
 # okapi:auto
+# okapi:public_name sub-lib
 ppx_ns_library(
     name = "#Sub_lib",
     submodules = [
@@ -208,6 +210,7 @@ ocaml_module(
     deps = ["//a:#A"],
 )
 
+# okapi:public_name sub-extra-lib
 ocaml_ns_library(
     name = "#Sub_extra_lib",
     submodules = [

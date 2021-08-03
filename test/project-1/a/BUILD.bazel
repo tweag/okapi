@@ -39,6 +39,7 @@ ocaml_module(
 )
 
 # okapi:auto
+# okapi:public_name a
 ocaml_ns_library(
     name = "#A",
     submodules = [

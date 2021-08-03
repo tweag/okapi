@@ -6,6 +6,11 @@ import (
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
+type KeyValue struct {
+  key string
+  value string
+}
+
 type ModuleAlt struct {
   Cond string
   Choice string
@@ -106,6 +111,7 @@ func (KindPlain) wrapped() bool { return false }
 type Library struct {
   Slug string
   Name string
+  PublicName string
   Modules []string
   Opts []string
   DepsOpam []string
@@ -129,7 +135,6 @@ func targetNames(deps []string) []string {
 
 func commonAttrs(lib Library, r *rule.Rule, deps []string) RuleResult {
   libDeps := append(lib.DepsOpam, lib.Kind.depsOpam()...)
-  // r.SetAttr("deps_opam", append(lib.DepsOpam, lib.Kind.depsOpam()...))
   r.SetAttr("opts", lib.Opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
   return RuleResult{lib.Kind.addAttrs(lib.Slug, r), libDeps}
@@ -171,6 +176,7 @@ func libraryRule(lib Library) RuleResult {
   r := rule.NewRule(lib.Kind.libraryRuleName(), lib.Name)
   setLibraryModules(lib, r)
   if lib.Auto { r.AddComment("# okapi:auto") }
+  r.AddComment("# okapi:public_name " + lib.PublicName)
   return RuleResult{r, nil}
 }
 

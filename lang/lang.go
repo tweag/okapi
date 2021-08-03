@@ -1,16 +1,16 @@
 package okapi
 
 import (
-  "flag"
-  "log"
-  "path/filepath"
+	"flag"
+	"log"
+	"path/filepath"
 
-  "github.com/bazelbuild/bazel-gazelle/config"
-  "github.com/bazelbuild/bazel-gazelle/label"
-  "github.com/bazelbuild/bazel-gazelle/language"
-  "github.com/bazelbuild/bazel-gazelle/repo"
-  "github.com/bazelbuild/bazel-gazelle/resolve"
-  "github.com/bazelbuild/bazel-gazelle/rule"
+	"github.com/bazelbuild/bazel-gazelle/config"
+	"github.com/bazelbuild/bazel-gazelle/label"
+	"github.com/bazelbuild/bazel-gazelle/language"
+	"github.com/bazelbuild/bazel-gazelle/repo"
+	"github.com/bazelbuild/bazel-gazelle/resolve"
+	"github.com/bazelbuild/bazel-gazelle/rule"
 )
 
 const okapiName = "okapi"
@@ -33,8 +33,11 @@ func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {
   if f == nil { return }
   m, ok := c.Exts[okapiName]
   var extraConfig Config
-  if ok { extraConfig = m.(Config)
-  } else { extraConfig = Config{ } }
+  if ok {
+    extraConfig = m.(Config)
+  } else {
+    extraConfig = Config{}
+  }
   c.Exts[okapiName] = extraConfig
 }
 
@@ -82,11 +85,24 @@ func importSpec(name string) resolve.ImportSpec {
   return resolve.ImportSpec{Lang: okapiName, Imp: name}
 }
 
+func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
+  var imports []resolve.ImportSpec
+  if isLibrary(r) {
+    imports = append(imports, importSpec(r.Name()))
+    if name, exists := ruleConfig(r, "public_name"); exists {
+      imports = append(imports, importSpec(name))
+    }
+  }
+  return imports
+}
+
+func (*okapiLang) Embeds(r *rule.Rule, from label.Label) []label.Label { return nil }
+
 type ResolvedLocal struct { label label.Label }
 type ResolvedOpam struct {}
 
 func resolveDep(c *config.Config, ix *resolve.RuleIndex, dep string) interface{} {
-  results := ix.FindRulesByImportWithConfig(c, importSpec(generateLibraryName(dep)), okapiName)
+  results := ix.FindRulesByImportWithConfig(c, importSpec(dep), okapiName)
   if len(results) == 0 {
     return ResolvedOpam{}
   } else if len(results) == 1 {
@@ -96,16 +112,6 @@ func resolveDep(c *config.Config, ix *resolve.RuleIndex, dep string) interface{}
     return nil
   }
 }
-
-func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
-  if isLibrary(r) {
-    return []resolve.ImportSpec{importSpec(r.Name())}
-  } else {
-    return nil
-  }
-}
-
-func (*okapiLang) Embeds(r *rule.Rule, from label.Label) []label.Label { return nil }
 
 func (*okapiLang) Resolve(
   c *config.Config,

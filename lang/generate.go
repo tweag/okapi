@@ -11,8 +11,8 @@ import (
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
-func generateLibraryName(dir string) string {
-  return "#" + strings.Title(strings.ReplaceAll(filepath.Base(dir), "-", "_"))
+func generateLibraryName(name string) string {
+  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
 }
 
 func GenerateRulesAuto(name string, sources Deps) []RuleResult {
@@ -22,6 +22,7 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   lib := Library{
     Slug: name,
     Name: generateLibraryName(name),
+    PublicName: name,
     Modules: keys,
     Opts: nil,
     DepsOpam: nil,
@@ -44,8 +45,13 @@ func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult 
   return multilib(libs, sources, auto)
 }
 
-func GenerateRules(name string, sources Deps, dune string) []RuleResult {
-  if dune == "" { return GenerateRulesAuto(name, sources) } else { return GenerateRulesDune(name, sources, dune) }
+func GenerateRules(dir string, sources Deps, dune string) []RuleResult {
+  name := filepath.Base(dir)
+  if dune == "" {
+    return GenerateRulesAuto(name, sources)
+  } else {
+    return GenerateRulesDune(name, sources, dune)
+  }
 }
 
 func tags(r *rule.Rule) []string {
@@ -53,9 +59,31 @@ func tags(r *rule.Rule) []string {
   rex := regexp.MustCompile(`^# okapi:(\S+)`)
   for _, c := range r.Comments() {
     match := rex.FindStringSubmatch(c)
-    if len(match) == 1 { tags = append(tags, match[0]) }
+    if len(match) == 2 { tags = append(tags, match[1]) }
   }
   return tags
+}
+
+func ruleConfigs(r *rule.Rule) []KeyValue {
+  var kvs []KeyValue
+  rex := regexp.MustCompile(`^# okapi:(\S+) (\S.*)`)
+  log.Print(r.Comments())
+  for _, c := range r.Comments() {
+    match := rex.FindStringSubmatch(c)
+    if len(match) == 3 { kvs = append(kvs, KeyValue{match[1], match[2]}) }
+  }
+  return kvs
+}
+
+func ruleConfig(r *rule.Rule, key string) (string, bool) {
+  for _, kv := range ruleConfigs(r) {
+    if kv.key == key { return kv.value, true }
+  }
+  return "", false
+}
+
+func ruleConfigOr(r *rule.Rule, key string, def string) string {
+  if value, exists := ruleConfig(r, key); exists { return value } else { return def }
 }
 
 // TODO need to fill in the deps somewhere after parsing, by looking for the corresponding ppx_executable
@@ -108,9 +136,12 @@ func existingLibrary(r *rule.Rule, sources Deps) (Library, bool) {
       clean := removeColon(name)
       if _, exists := sources[clean]; exists { modules = append(modules, clean) }
     }
+    nameSlug := slug(r.Name())
+    publicName := ruleConfigOr(r, "public_name", nameSlug)
     lib := Library{
-      Slug: slug(r.Name()),
+      Slug: nameSlug,
       Name: r.Name(),
+      PublicName: publicName,
       Modules: modules,
       Opts: nil,
       DepsOpam: nil,

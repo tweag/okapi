@@ -3,5 +3,5 @@ workspace(name = "okapi")
 load ("//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 
-load ("//bzl:setup.bzl", "okapi_setup")
-okapi_setup()
+load ("//bzl:setup.bzl", "okapi_setup_nix")
+okapi_setup_nix()

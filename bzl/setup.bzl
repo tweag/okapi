@@ -7,16 +7,19 @@ load("@bazel_gazelle//:deps.bzl", "go_repository")
 
 def okapi_setup_gen(ws = "WORKSPACE.bazel"):
     ocaml_dependencies()
-    nixpkgs_git_repository(
-        name = "nixpkgs",
-        revision = "21.05",
-    )
-    nixpkgs_go_configure(repository = "@nixpkgs")
     go_rules_dependencies()
     gazelle_dependencies(go_repository_default_config = "@//:" + ws)
 
 def okapi_setup():
     okapi_setup_gen()
+
+def okapi_setup_nix():
+    nixpkgs_git_repository(
+        name = "nixpkgs",
+        revision = "21.05",
+    )
+    nixpkgs_go_configure(repository = "@nixpkgs")
+    okapi_setup()
 
 def okapi_setup_legacy():
     okapi_setup_gen(ws = "WORKSPACE")

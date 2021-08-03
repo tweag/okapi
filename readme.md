@@ -42,6 +42,9 @@ load("@obazl_rules_ocaml//ocaml:bootstrap.bzl", "ocaml_configure")
 ocaml_configure(build = "4.10", opam = opam)
 ```
 
+For a project that uses `rules_nixpkgs`, an alternative setup macro called `okapi_setup_nix` additionally configures Go
+through nixpkgs.
+
 The file `BUILD.bazel` defines the target that integrates Gazelle, so that build file generation can be triggered by
 running `bazel run //:gazelle`:
 

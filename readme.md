@@ -276,6 +276,20 @@ Dune allows the `libraries` stanza to be a mix of OPAM dependencies and librarie
 For Bazel, the two need to be differentiated.
 For this purpose, the Gazelle resolver step examines the depspecs in `libraries` and looks for a matching library rule,
 adding it to the `deps` attribute on success and `deps_opam` otherwise.
+Valid matches are the values form both the `name` and `public_name` stanzas in the Dune config.
+
+This feature can be used manually as well, in which case either the library rule's `name` attribute is matched, or, if
+available, the `public_name` from a comment:
+
+```bzl
+# okapi:public_name acme.missiles
+ocaml_ns_library(
+    name = "#Acme_missiles",
+    submodules = [...]
+)
+```
+
+This would only be relevant when using a mix of Dune and automatic builds.
 
 [Gazelle]: https://github.com/bazelbuild/bazel-gazelle
 [OBazl]: https://github.com/obazl/rules_ocaml

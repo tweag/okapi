@@ -67,7 +67,6 @@ func tags(r *rule.Rule) []string {
 func ruleConfigs(r *rule.Rule) []KeyValue {
   var kvs []KeyValue
   rex := regexp.MustCompile(`^# okapi:(\S+) (\S.*)`)
-  log.Print(r.Comments())
   for _, c := range r.Comments() {
     match := rex.FindStringSubmatch(c)
     if len(match) == 3 { kvs = append(kvs, KeyValue{match[1], match[2]}) }

@@ -1,16 +1,16 @@
 package okapi
 
 import (
-	"flag"
-	"log"
-	"path/filepath"
+  "flag"
+  "log"
+  "path/filepath"
 
-	"github.com/bazelbuild/bazel-gazelle/config"
-	"github.com/bazelbuild/bazel-gazelle/label"
-	"github.com/bazelbuild/bazel-gazelle/language"
-	"github.com/bazelbuild/bazel-gazelle/repo"
-	"github.com/bazelbuild/bazel-gazelle/resolve"
-	"github.com/bazelbuild/bazel-gazelle/rule"
+  "github.com/bazelbuild/bazel-gazelle/config"
+  "github.com/bazelbuild/bazel-gazelle/label"
+  "github.com/bazelbuild/bazel-gazelle/language"
+  "github.com/bazelbuild/bazel-gazelle/repo"
+  "github.com/bazelbuild/bazel-gazelle/resolve"
+  "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
 const okapiName = "okapi"

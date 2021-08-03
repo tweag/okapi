@@ -9,5 +9,5 @@
       "codept"
     ];
 
-  in (obazl.flakes { inherit depsOpam; }).systems;
+  in obazl.systems { inherit depsOpam; };
 }

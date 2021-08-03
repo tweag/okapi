@@ -14,20 +14,6 @@ ocaml_module(
     struct = ":final.ml",
 )
 
-ocaml_module(
-    name = "sub",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    struct = ":sub.ml",
-)
-
 ocaml_signature(
     name = "new_sig",
     src = ":new.mli",
@@ -55,6 +41,20 @@ ocaml_module(
     ],
     sig = ":new_sig",
     struct = ":new.ml",
+)
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
 )
 
 # okapi:auto

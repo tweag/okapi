@@ -8,8 +8,8 @@ local_repository(
 load("@okapi//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 
-load("@okapi//bzl:setup.bzl", "okapi_setup")
-okapi_setup()
+load("@okapi//bzl:setup.bzl", "okapi_setup_nix")
+okapi_setup_nix()
 
 load("@obazl_rules_ocaml//ocaml:providers.bzl", "BuildConfig", "OpamConfig")
 opam = OpamConfig(

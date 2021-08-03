@@ -29,6 +29,8 @@ okapi_deps()
 load("@okapi//bzl:setup.bzl", "okapi_setup")
 okapi_setup()
 
+# configure Go toolchain here
+
 # This is the standard OBazl setup, requires an existing OPAM repository with the switch and compiler specified here
 load("@obazl_rules_ocaml//ocaml:providers.bzl", "BuildConfig", "OpamConfig")
 opam = OpamConfig(
@@ -42,8 +44,8 @@ load("@obazl_rules_ocaml//ocaml:bootstrap.bzl", "ocaml_configure")
 ocaml_configure(build = "4.10", opam = opam)
 ```
 
-For a project that uses `rules_nixpkgs`, an alternative setup macro called `okapi_setup_nix` additionally configures Go
-through nixpkgs.
+For a project that uses `rules_nixpkgs`, an alternative setup macro called `okapi_setup_nix` additionally configures the
+Go toolchain through nixpkgs.
 
 The file `BUILD.bazel` defines the target that integrates Gazelle, so that build file generation can be triggered by
 running `bazel run //:gazelle`:

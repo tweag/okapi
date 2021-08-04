@@ -112,6 +112,7 @@ type Library struct {
   Slug string
   Name string
   PublicName string
+  Implements string
   Modules []string
   Opts []string
   DepsOpam []string
@@ -155,14 +156,23 @@ func libModuleRule(lib Library, src Source) *rule.Rule {
   return r
 }
 
+func remove(name string, deps []string) []string {
+  var result []string
+  for _, dep := range deps {
+    if dep != name { result = append(result, dep) }
+  }
+  return result
+}
+
 func libSourceRules(sources Deps, lib Library) []RuleResult {
   var rules []RuleResult
   rules = append(rules, lib.Kind.extraRules(lib.Slug)...)
   for _, name := range lib.Modules {
     src, srcExists := sources[name]
     if !srcExists { src = Source{name, false, nil} }
-    if src.Intf { rules = append(rules, commonAttrs(lib, libSignatureRule(src), src.Deps)) }
-    rules = append(rules, commonAttrs(lib, libModuleRule(lib, src), src.Deps))
+    cleanDeps := remove(name, src.Deps)
+    if src.Intf { rules = append(rules, commonAttrs(lib, libSignatureRule(src), cleanDeps)) }
+    rules = append(rules, commonAttrs(lib, libModuleRule(lib, src), cleanDeps))
   }
   return rules
 }
@@ -177,6 +187,7 @@ func libraryRule(lib Library) RuleResult {
   setLibraryModules(lib, r)
   if lib.Auto { r.AddComment("# okapi:auto") }
   r.AddComment("# okapi:public_name " + lib.PublicName)
+  if lib.Implements != "" { r.AddComment("# okapi:implements " + lib.Implements) }
   return RuleResult{r, nil}
 }
 

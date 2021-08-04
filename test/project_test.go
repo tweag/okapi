@@ -58,8 +58,15 @@ end
 (library
  (name sub_extra_lib)
  (public_name sub-extra-lib)
- (libraries a)
+ (libraries a virt)
  (modules foo bar))
+
+(library
+ (name virt_impl)
+ (public_name virt_impl)
+ (implements virt)
+ (modules virt1)
+)
 -- a/sub/bar.ml --
 module Bar = struct
   let sub a = a
@@ -75,6 +82,7 @@ end
 module Sub = struct
   let sub a = a
 end
+-- a/sub/virt1.ml --
 `,
   WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
@@ -200,6 +208,7 @@ ocaml_module(
     deps = [
         ":bar",
         "//a:#A",
+        "//a/sub:#Virt_impl",
     ],
 )
 
@@ -207,7 +216,10 @@ ocaml_module(
     name = "bar",
     opts = [],
     struct = ":bar.ml",
-    deps = ["//a:#A"],
+    deps = [
+        "//a:#A",
+        "//a/sub:#Virt_impl",
+    ],
 )
 
 # okapi:public_name sub-extra-lib
@@ -217,6 +229,20 @@ ocaml_ns_library(
         ":bar",
         ":foo",
     ],
+    visibility = ["//visibility:public"],
+)
+
+ocaml_module(
+    name = "virt1",
+    opts = [],
+    struct = ":virt1.ml",
+)
+
+# okapi:public_name virt_impl
+# okapi:implements virt
+ocaml_ns_library(
+    name = "#Virt_impl",
+    submodules = [":virt1"],
     visibility = ["//visibility:public"],
 )
 `

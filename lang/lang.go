@@ -92,6 +92,9 @@ func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolv
     if name, exists := ruleConfig(r, "public_name"); exists {
       imports = append(imports, importSpec(name))
     }
+    if name, exists := ruleConfig(r, "implements"); exists {
+      imports = append(imports, importSpec(name))
+    }
   }
   return imports
 }

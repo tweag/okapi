@@ -1,11 +1,11 @@
 package okapi
 
 import (
-	"encoding/json"
-	"log"
-	"os/exec"
-	"path/filepath"
-	"strings"
+  "encoding/json"
+  "log"
+  "os/exec"
+  "path/filepath"
+  "strings"
 )
 
 type CodeptDep struct {
@@ -45,21 +45,28 @@ func consSource(name string, sigs map[string][]string, deps []string) Source {
   }
 }
 
+func modulePath(segments []string) string { return strings.Join(segments, ".") }
+
+// The `local` key in the codept output maps all used modules to their defining source files with the structure
+// { "module": ["Qualified", "Module", "Name"], "ml": "/path/to/name.ml" }.
+// THe `dependencies` key maps each input file to the set of modules they use, with the structure
+// { "file": "/path/to/name.ml", deps: [["Qualified", "Module", "Name"], ["List"]] }.
+// This function maps the files from `dependencies` to the files from `local`, noting whether a signature exists for
+// each module.
 func consDeps(dir string, codept Codept) Deps {
   local := make(map[string]string)
   sigs := make(map[string][]string)
   mods := make(map[string][]string)
   sources := make(Deps)
   for _, loc := range codept.Local {
-    for _, mod := range loc.Module { local[mod] = depName(loc.Ml) }
+    local[modulePath(loc.Module)] = depName(loc.Ml)
   }
   for _, src := range codept.Dependencies {
     if filepath.Dir(src.File) == dir {
       var deps []string
       for _, ds := range src.Deps {
-        for _, d := range ds {
-          if local[d] != "" { deps = append(deps, local[d]) }
-        }
+        dep := local[modulePath(ds)]
+        if dep != "" { deps = append(deps, dep) }
       }
       name := depName(src.File)
       if filepath.Ext(src.File) == ".mli" { sigs[name] = deps } else { mods[name] = deps }
@@ -71,13 +78,18 @@ func consDeps(dir string, codept Codept) Deps {
 
 // While codept is able to scan a directory, there's no way to exclude subdirectories, so files have to be specified
 // explicitly.
+// In some cases, for example when the module `Stdlib.List` is used, codept will list modules without prefix (e.g.
+// `List`). If there is a local module of the same name, this will cause a false positive. Therefore, the input files
+// are specified as `Okapi[foo.ml,bar.ml]`, which will make local modules appear as `["Okapi", "List"]` in the output,
+// disambiguating them sufficiently.
 func runCodept(dir string, files []string) []byte {
-  var args = []string{"-native", "-deps"}
+  var paths []string
   for _, file := range files {
     if filepath.Ext(file) == ".ml" || filepath.Ext(file) == ".mli" {
-      args = append(args, dir + "/" + file)
+      paths = append(paths, dir + "/" + file)
     }
   }
+  args := []string{"-native", "-deps", "Okapi[" + strings.Join(paths, ",") + "]"}
   cmd := exec.Command("codept", args...)
   out, err := cmd.Output()
   if err != nil { log.Fatal("codept failed for " + dir + ": " + string(out[:])) }

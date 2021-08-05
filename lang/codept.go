@@ -27,6 +27,7 @@ type Codept struct {
 type Source struct {
   Name string
   Intf bool
+  Virtual bool
   Deps []string
 }
 
@@ -36,12 +37,13 @@ func depName(file string) string {
   return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 }
 
-func consSource(name string, sigs map[string][]string, deps []string) Source {
-  _, intf := sigs[name]
+func consSource(name string, intfs map[string][]string, deps []string) Source {
+  _, intf := intfs[name]
   return Source{
-    Name: name,
-    Intf: intf,
-    Deps: deps,
+  	Name: name,
+  	Intf: intf,
+  	Virtual: false,
+  	Deps: deps,
   }
 }
 
@@ -55,11 +57,13 @@ func modulePath(segments []string) string { return strings.Join(segments, ".") }
 // each module.
 func consDeps(dir string, codept Codept) Deps {
   local := make(map[string]string)
-  sigs := make(map[string][]string)
+  intfs := make(map[string][]string)
   mods := make(map[string][]string)
   sources := make(Deps)
   for _, loc := range codept.Local {
-    local[modulePath(loc.Module)] = depName(loc.Ml)
+    src := loc.Ml
+    if src == "" { src = loc.Mli }
+    local[modulePath(loc.Module)] = depName(src)
   }
   for _, src := range codept.Dependencies {
     if filepath.Dir(src.File) == dir {
@@ -69,10 +73,13 @@ func consDeps(dir string, codept Codept) Deps {
         if dep != "" { deps = append(deps, dep) }
       }
       name := depName(src.File)
-      if filepath.Ext(src.File) == ".mli" { sigs[name] = deps } else { mods[name] = deps }
+      if filepath.Ext(src.File) == ".mli" { intfs[name] = deps } else { mods[name] = deps }
     }
   }
-  for src, deps := range mods { sources[src] = consSource(src, sigs, deps) }
+  for src, deps := range mods { sources[src] = consSource(src, intfs, deps) }
+  for src, deps := range intfs {
+    if _, mod := mods[src]; !mod { sources[src] = Source{Name: src, Intf: false, Virtual: true, Deps: deps} }
+  }
   return sources
 }
 

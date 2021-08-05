@@ -2,7 +2,7 @@ package okapi
 
 import (
   "flag"
-  "log"
+  "fmt"
   "path/filepath"
 
   "github.com/bazelbuild/bazel-gazelle/config"
@@ -81,10 +81,6 @@ func (*okapiLang) Loads() []rule.LoadInfo {
 
 func (*okapiLang) Fix(c *config.Config, f *rule.File) {}
 
-func importSpec(name string) resolve.ImportSpec {
-  return resolve.ImportSpec{Lang: okapiName, Imp: name}
-}
-
 func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
   var imports []resolve.ImportSpec
   if isLibrary(r) {
@@ -93,28 +89,17 @@ func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolv
       imports = append(imports, importSpec(name))
     }
     if name, exists := ruleConfig(r, "implements"); exists {
-      imports = append(imports, importSpec(name))
+      imports = append(imports, importSpec("impl:" + name))
+    }
+  } else if isSignature(r) {
+    if lib, exists := ruleConfig(r, "virt"); exists {
+      imports = append(imports, importSpec(fmt.Sprintf("virt:%s:%s", lib, r.Name())))
     }
   }
   return imports
 }
 
 func (*okapiLang) Embeds(r *rule.Rule, from label.Label) []label.Label { return nil }
-
-type ResolvedLocal struct { label label.Label }
-type ResolvedOpam struct {}
-
-func resolveDep(c *config.Config, ix *resolve.RuleIndex, dep string) interface{} {
-  results := ix.FindRulesByImportWithConfig(c, importSpec(dep), okapiName)
-  if len(results) == 0 {
-    return ResolvedOpam{}
-  } else if len(results) == 1 {
-    return ResolvedLocal{results[0].Label}
-  } else {
-    log.Fatal("Multiple libraries matched the depspec `" + dep + "`")
-    return nil
-  }
-}
 
 func (*okapiLang) Resolve(
   c *config.Config,
@@ -124,33 +109,18 @@ func (*okapiLang) Resolve(
   imports interface{},
   from label.Label,
 ) {
-  findDep := func (dep string) interface{} {
-    return resolveDep(c, ix, dep)
-  }
   if isSource(r) {
-    var locals []string
-    var opams []string
-    if deps, isStrings := imports.([]string); isStrings {
-      for _, dep := range deps {
-        resolved := findDep(dep)
-        if local, isLocal := resolved.(ResolvedLocal); isLocal {
-          locals = append(locals, local.label.String())
-        } else if _, isOpam := resolved.(ResolvedOpam); isOpam {
-          opams = append(opams, dep)
-        }
+    libraryDeps(c, ix, imports, r)
+    if isModule(r) {
+      if lib, exists := ruleConfig(r, "implements"); exists {
+        implementationDeps(c, ix, r, lib)
       }
-      if len(locals) > 0 { r.SetAttr("deps", append(r.AttrStrings("deps"), locals...)) }
-      if len(opams) > 0 { r.SetAttr("deps_opam", opams) }
-    } else {
-      log.Fatalf("Invalid type for imports of source file %s: %#v", r.Name(), imports)
     }
   }
 }
 
 func containsLibrary(rules []*rule.Rule) bool {
-  for _, r := range rules {
-    if isLibrary(r) { return true }
-  }
+  for _, r := range rules { if isLibrary(r) { return true } }
   return false
 }
 

@@ -4,6 +4,7 @@ go_library(
     name = "lang",
     srcs = [
         "codept.go",
+        "deps.go",
         "dune.go",
         "generate.go",
         "lang.go",
@@ -41,6 +42,7 @@ filegroup(
     srcs = [
         "BUILD.bazel",
         "codept.go",
+        "deps.go",
         "dune.go",
         "generate.go",
         "lang.go",

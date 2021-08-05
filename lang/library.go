@@ -1,6 +1,7 @@
 package okapi
 
 import (
+  "fmt"
   "sort"
 
   "github.com/bazelbuild/bazel-gazelle/rule"
@@ -21,76 +22,6 @@ type ModuleChoice struct {
   Alts []ModuleAlt
 }
 
-type PpxKind interface {
-  exe(name string) []RuleResult
-  inlineTest() bool
-  depsOpam() []string
-}
-type PpxTransitive struct {}
-type PpxDirect struct { deps []string }
-
-func (ppx PpxDirect) exe(slug string) []RuleResult {
-  return []RuleResult{{ppxExecutable(slug, ppx.deps), nil}}
-}
-func (PpxTransitive) exe(string) []RuleResult { return nil }
-
-func (ppx PpxDirect) inlineTest() bool { return contains("ppx_inline_test", ppx.deps) }
-func (PpxTransitive) inlineTest() bool { return false }
-
-func (ppx PpxDirect) depsOpam() []string { return ppx.deps }
-func (PpxTransitive) depsOpam() []string { return nil }
-
-type Kind interface {
-  libraryRuleName() string
-  moduleRuleName() string
-  moduleAttr() string
-  depsOpam() []string
-  addAttrs(slug string, r *rule.Rule) *rule.Rule
-  extraRules(name string) []RuleResult
-  wrapped() bool
-}
-
-type KindNsPpx struct { ppx PpxKind }
-type KindNs struct {}
-type KindPpx struct { ppx PpxKind }
-type KindPlain struct {}
-
-func (KindNsPpx) libraryRuleName() string { return "ppx_ns_library" }
-func (KindNs) libraryRuleName() string { return "ocaml_ns_library" }
-func (KindPpx) libraryRuleName() string { return "ppx_library" }
-func (KindPlain) libraryRuleName() string { return "ocaml_library" }
-
-func (KindNsPpx) moduleRuleName() string { return "ppx_module" }
-func (KindNs) moduleRuleName() string { return "ocaml_module" }
-func (KindPpx) moduleRuleName() string { return "ppx_module" }
-func (KindPlain) moduleRuleName() string { return "ocaml_module" }
-
-func (KindNsPpx) moduleAttr() string { return "submodules" }
-func (KindNs) moduleAttr() string { return "submodules" }
-func (KindPpx) moduleAttr() string { return "modules" }
-func (KindPlain) moduleAttr() string { return "modules" }
-
-func (k KindNsPpx) depsOpam() []string { return k.ppx.depsOpam() }
-func (KindNs) depsOpam() []string { return nil }
-func (k KindPpx) depsOpam() []string { return k.ppx.depsOpam() }
-func (KindPlain) depsOpam() []string { return nil }
-
-func ppxName(libName string) string { return "ppx_" + libName }
-
-func addPpxAttrs(slug string, r *rule.Rule, ppx PpxKind) *rule.Rule {
-  r.SetAttr("ppx", ":" + ppxName(slug))
-  r.SetAttr("ppx_print", "@ppx//print:text")
-  if ppx.inlineTest() {
-    r.SetAttr("ppx_tags", []string{"inline-test"})
-  }
-  return r
-}
-
-func (k KindNsPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r, k.ppx) }
-func (KindNs) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
-func (k KindPpx) addAttrs(slug string, r *rule.Rule) *rule.Rule { return addPpxAttrs(slug, r, k.ppx) }
-func (KindPlain) addAttrs(slug string, r *rule.Rule) *rule.Rule { return r }
-
 func ppxExecutable(name string, deps []string) *rule.Rule {
   r := rule.NewRule("ppx_executable", ppxName(name))
   r.SetAttr("deps_opam", deps)
@@ -98,28 +29,126 @@ func ppxExecutable(name string, deps []string) *rule.Rule {
   return r
 }
 
-func (k KindNsPpx) extraRules(slug string) []RuleResult { return k.ppx.exe(slug) }
-func (KindNs) extraRules(string) []RuleResult { return nil }
-func (k KindPpx) extraRules(slug string) []RuleResult { return k.ppx.exe(slug) }
-func (KindPlain) extraRules(string) []RuleResult { return nil }
+type PpxKind interface {
+  exe(name string) []RuleResult
+  depsOpam() []string
+  isPpx() bool
+}
 
-func (KindNsPpx) wrapped() bool { return true }
-func (KindNs) wrapped() bool { return true }
-func (KindPpx) wrapped() bool { return false }
-func (KindPlain) wrapped() bool { return false }
+type PpxTransitive struct {}
+type PpxDirect struct { deps []string }
+type NoPpx struct {}
+
+func (PpxTransitive) exe(string) []RuleResult { return nil }
+func (ppx PpxDirect) exe(slug string) []RuleResult {
+  return []RuleResult{{ppxExecutable(slug, ppx.deps), nil}}
+}
+func (NoPpx) exe(string) []RuleResult { return nil }
+
+func (PpxTransitive) depsOpam() []string { return nil }
+func (ppx PpxDirect) depsOpam() []string { return ppx.deps }
+func (NoPpx) depsOpam() []string { return nil }
+
+func (PpxTransitive) isPpx() bool { return true }
+func (PpxDirect) isPpx() bool { return true }
+func (NoPpx) isPpx() bool { return false }
+
+func ppxName(libName string) string { return "ppx_" + libName }
+
+func addAttrs(slug string, r *rule.Rule, kind PpxKind) {
+  if ppx, isDirect := kind.(PpxDirect); isDirect {
+    r.SetAttr("ppx", ":" + ppxName(slug))
+    r.SetAttr("ppx_print", "@ppx//print:text")
+    if contains("ppx_inline_test", ppx.deps) { r.SetAttr("ppx_tags", []string{"inline-test"}) }
+  }
+}
+
+func extraRules(kind PpxKind, slug string) []RuleResult {
+  if ppx, isDirect := kind.(PpxDirect); isDirect { return ppx.exe(slug) }
+  return nil
+}
+
+type LibraryKind interface {
+  ruleName() string
+  ppx() bool
+  wrapped() bool
+}
+
+type LibNsPpx struct {}
+type LibNs struct {}
+type LibPpx struct {}
+type LibPlain struct {}
+
+func (LibNsPpx) ruleName() string { return "ppx_ns_library" }
+func (LibNs) ruleName() string { return "ocaml_ns_library" }
+func (LibPpx) ruleName() string { return "ppx_library" }
+func (LibPlain) ruleName() string { return "ocaml_library" }
+
+func (LibNsPpx) ppx() bool { return true }
+func (LibNs) ppx() bool { return false }
+func (LibPpx) ppx() bool { return true }
+func (LibPlain) ppx() bool { return false }
+
+func (LibNsPpx) wrapped() bool { return true }
+func (LibNs) wrapped() bool { return true }
+func (LibPpx) wrapped() bool { return false }
+func (LibPlain) wrapped() bool { return false }
+
+type ExeKind interface {
+  ruleName() string
+  ppx() bool
+}
+
+type ExePpx struct {}
+type ExePlain struct {}
+
+func (ExePpx) ruleName() string { return "ppx_executable" }
+func (ExePlain) ruleName() string { return "ocaml_executable" }
+
+func (ExePpx) ppx() bool { return true }
+func (ExePlain) ppx() bool { return false }
+
+type ComponentKind interface {
+  componentRule(component Component) *rule.Rule
+}
 
 type Library struct {
-  Slug string
-  Name string
-  PublicName string
-  Implements string
-  Modules []string
-  Opts []string
-  DepsOpam []string
-  Choices []ModuleChoice
-  Auto bool
-  Wrapped bool
-  Kind Kind
+  wrapped bool
+  virtualModules []string
+  implements string
+  kind LibraryKind
+}
+
+type Executable struct {
+  kind ExeKind
+}
+
+func moduleAttr(wrapped bool) string {
+  if wrapped { return "modules" } else { return "submodules" }
+}
+
+func (lib Library) componentRule(component Component) *rule.Rule {
+  r := rule.NewRule(lib.kind.ruleName(), component.name)
+  r.SetAttr(moduleAttr(lib.wrapped), targetNames(component.modules))
+  if lib.implements != "" { r.AddComment("# okapi:implements " + lib.implements) }
+  return r
+}
+
+func (exe Executable) componentRule(component Component) *rule.Rule {
+  return rule.NewRule(exe.kind.ruleName(), component.name)
+}
+
+type Component struct {
+  slug string
+  name string
+  publicName string
+  modules []string
+  opts []string
+  depsOpam []string
+  choices []ModuleChoice
+  auto bool
+  ppx PpxKind
+  kind ComponentKind
 }
 
 type RuleResult struct {
@@ -134,25 +163,40 @@ func targetNames(deps []string) []string {
   return result
 }
 
-func commonAttrs(lib Library, r *rule.Rule, deps []string) RuleResult {
-  libDeps := append(lib.DepsOpam, lib.Kind.depsOpam()...)
-  r.SetAttr("opts", lib.Opts)
+func commonAttrs(lib Component, r *rule.Rule, deps []string) RuleResult {
+  libDeps := append(lib.depsOpam, lib.ppx.depsOpam()...)
+  r.SetAttr("opts", lib.opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  return RuleResult{lib.Kind.addAttrs(lib.Slug, r), libDeps}
+  addAttrs(lib.slug, r, lib.ppx)
+  return RuleResult{r, libDeps}
 }
 
 func sigTarget(src Source) string { return src.Name + "_sig" }
 
-func libSignatureRule(src Source) *rule.Rule {
+func signatureRule(src Source) *rule.Rule {
   r := rule.NewRule("ocaml_signature", sigTarget(src))
   r.SetAttr("src", ":" + src.Name + ".mli")
   return r
 }
 
-func libModuleRule(lib Library, src Source) *rule.Rule {
-  r := rule.NewRule(lib.Kind.moduleRuleName(), src.Name)
+func virtualSignatureRule(libName string, src Source) *rule.Rule {
+  r := signatureRule(src)
+  r.AddComment(fmt.Sprintf("# okapi:virt %s", libName))
+  return r
+}
+
+func moduleRuleName(component Component) string {
+  if component.ppx.isPpx() { return "ppx_module" } else { return "ocaml_module" }
+}
+
+func moduleRule(component Component, src Source) *rule.Rule {
+  r := rule.NewRule(moduleRuleName(component), src.Name)
   r.SetAttr("struct", ":" + src.Name + ".ml")
-  if src.Intf { r.SetAttr("sig", ":" + sigTarget(src)) }
+  if src.Intf {
+    r.SetAttr("sig", ":" + sigTarget(src))
+  } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
+    r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
+  }
   return r
 }
 
@@ -164,35 +208,46 @@ func remove(name string, deps []string) []string {
   return result
 }
 
-func libSourceRules(sources Deps, lib Library) []RuleResult {
+func librarySourceRules(component Component, lib Library, sources Deps) []RuleResult {
   var rules []RuleResult
-  rules = append(rules, lib.Kind.extraRules(lib.Slug)...)
-  for _, name := range lib.Modules {
+  for _, name := range lib.virtualModules {
     src, srcExists := sources[name]
-    if !srcExists { src = Source{name, false, nil} }
+    if !srcExists { src = Source{name, false, false, nil} }
     cleanDeps := remove(name, src.Deps)
-    if src.Intf { rules = append(rules, commonAttrs(lib, libSignatureRule(src), cleanDeps)) }
-    rules = append(rules, commonAttrs(lib, libModuleRule(lib, src), cleanDeps))
+    rules = append(rules, commonAttrs(component, virtualSignatureRule(component.publicName, src), cleanDeps))
   }
   return rules
 }
 
-func setLibraryModules(lib Library, r *rule.Rule) {
-  r.SetAttr(lib.Kind.moduleAttr(), targetNames(lib.Modules))
+func sourceRules(sources Deps, component Component) []RuleResult {
+  var rules []RuleResult
+  rules = append(rules, extraRules(component.ppx, component.slug)...)
+  for _, name := range component.modules {
+    src, srcExists := sources[name]
+    if !srcExists { src = Source{name, false, false, nil} }
+    cleanDeps := remove(name, src.Deps)
+    if src.Intf { rules = append(rules, commonAttrs(component, signatureRule(src), cleanDeps)) }
+    rules = append(rules, commonAttrs(component, moduleRule(component, src), cleanDeps))
+  }
+  if lib, isLib := component.kind.(Library); isLib {
+    librarySourceRules(component, lib, sources)
+  }
+  return rules
+}
+
+func setLibraryModules(component Component, r *rule.Rule) {
+}
+
+func componentRule(component Component) *rule.Rule {
+  r := component.kind.componentRule(component)
+  if component.auto { r.AddComment("# okapi:auto") }
+  r.AddComment("# okapi:public_name " + component.publicName)
   r.SetAttr("visibility", []string{"//visibility:public"})
+  return r
 }
 
-func libraryRule(lib Library) RuleResult {
-  r := rule.NewRule(lib.Kind.libraryRuleName(), lib.Name)
-  setLibraryModules(lib, r)
-  if lib.Auto { r.AddComment("# okapi:auto") }
-  r.AddComment("# okapi:public_name " + lib.PublicName)
-  if lib.Implements != "" { r.AddComment("# okapi:implements " + lib.Implements) }
-  return RuleResult{r, nil}
-}
-
-func library(sources Deps, lib Library) []RuleResult {
-  return append(libSourceRules(sources, lib), libraryRule(lib))
+func component(sources Deps, component Component) []RuleResult {
+  return append(sourceRules(sources, component), RuleResult{componentRule(component), nil})
 }
 
 // Update an existing build that has been manually amended by the user to contain more than one library.
@@ -200,19 +255,19 @@ func library(sources Deps, lib Library) []RuleResult {
 // TODO when `select` directives are used from dune, they don't create module rules for the choices.
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
-func multilib(libs []Library, sources Deps, auto []string) []RuleResult {
+func multilib(libs []Component, sources Deps, auto []string) []RuleResult {
   var rules []RuleResult
   for _, lib := range libs {
-    if lib.Auto { lib.Modules = append(lib.Modules, auto...) }
-    rules = append(rules, library(sources, lib)...)
+    if lib.auto { lib.modules = append(lib.modules, auto...) }
+    rules = append(rules, component(sources, lib)...)
   }
   return rules
 }
 
-func libChoices(libs []Library) map[string]bool {
+func libChoices(libs []Component) map[string]bool {
   result := make(map[string]bool)
   for _, lib := range libs {
-    for _, c := range lib.Choices {
+    for _, c := range lib.choices {
       for _, a := range c.Alts {
         result[depName(a.Choice)] = true
       }
@@ -221,12 +276,15 @@ func libChoices(libs []Library) map[string]bool {
   return result
 }
 
-func autoModules(libs []Library, sources Deps) []string {
+func autoModules(components []Component, sources Deps) []string {
   knownModules := make(map[string]bool)
-  choices := libChoices(libs)
+  choices := libChoices(components)
   var auto []string
-  for _, lib := range libs {
-    for _, mod := range lib.Modules { knownModules[mod] = true }
+  for _, component := range components {
+    for _, mod := range component.modules { knownModules[mod] = true }
+    if lib, isLib := component.kind.(Library); isLib {
+      for _, mod := range lib.virtualModules { knownModules[mod] = true }
+    }
   }
   for name := range sources {
     if _, exists := knownModules[name]; !exists {

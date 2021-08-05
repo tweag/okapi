@@ -19,27 +19,32 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
   sort.Strings(keys)
-  lib := Library{
-    Slug: name,
-    Name: generateLibraryName(name),
-    PublicName: name,
-    Modules: keys,
-    Opts: nil,
-    DepsOpam: nil,
-    Choices: nil,
-    Auto: true,
-    Wrapped: false,
-    Kind: KindNs{},
+  lib := Component{
+    slug: name,
+    name: generateLibraryName(name),
+    publicName: name,
+    modules: keys,
+    opts: nil,
+    depsOpam: nil,
+    choices: nil,
+    auto: true,
+    ppx: NoPpx{},
+    kind: Library{
+      wrapped: false,
+      virtualModules: nil,
+      implements: "",
+      kind: LibNs{},
+    },
   }
-  return library(sources, lib)
+  return component(sources, lib)
 }
 
 func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
   conf := parseDuneFile(duneCode)
   duneLibs := DecodeDuneConfig(name, conf)
-  var libs []Library
+  var libs []Component
   for _, dune := range duneLibs {
-    libs = append(libs, duneToLibrary(dune))
+    libs = append(libs, duneToOBazl(dune))
   }
   auto := autoModules(libs, sources)
   return multilib(libs, sources, auto)
@@ -64,6 +69,10 @@ func tags(r *rule.Rule) []string {
   return tags
 }
 
+func hasTag(name string, r *rule.Rule) bool {
+  return contains(name, tags(r))
+}
+
 func ruleConfigs(r *rule.Rule) []KeyValue {
   var kvs []KeyValue
   rex := regexp.MustCompile(`^# okapi:(\S+) (\S.*)`)
@@ -81,6 +90,17 @@ func ruleConfig(r *rule.Rule, key string) (string, bool) {
   return "", false
 }
 
+func ruleConfig2(r *rule.Rule, key string) (string, string, bool) {
+  if annotation, exists := ruleConfig(r, key); exists {
+    parts := strings.Split(annotation, " ")
+    if len(parts) != 2 {
+      log.Fatalf("Invalid `%s` annotation for %s: %s", key, r.Name(), annotation)
+    }
+    return parts[0], parts[1], true
+  }
+  return "", "", false
+}
+
 func ruleConfigOr(r *rule.Rule, key string, def string) string {
   if value, exists := ruleConfig(r, key); exists { return value } else { return def }
 }
@@ -88,11 +108,11 @@ func ruleConfigOr(r *rule.Rule, key string, def string) string {
 // TODO need to fill in the deps somewhere after parsing, by looking for the corresponding ppx_executable
 // maybe that can even be skipped by passing around a flag `UpdateMode` and not emitting a ppx_executable when true,
 // since it would just generate the identical rule again.
-var libKinds = map[string]Kind {
-  "ocaml_ns_library": KindNs{},
-  "ppx_ns_library": KindNsPpx{},
-  "ocaml_library": KindPlain{},
-  "ppx_library": KindPpx{},
+var libKinds = map[string]LibraryKind {
+  "ocaml_ns_library": LibNs{},
+  "ppx_ns_library": LibNsPpx{},
+  "ocaml_library": LibPlain{},
+  "ppx_library": LibPpx{},
 }
 
 func isLibrary(r *rule.Rule) bool {
@@ -107,8 +127,23 @@ var sourceKinds = map[string]bool {
 }
 
 func isSource(r *rule.Rule) bool {
-  _, isSrc := sourceKinds[r.Kind()]
-  return isSrc
+  _, isSource := sourceKinds[r.Kind()]
+  return isSource
+}
+
+var moduleKinds = map[string]bool {
+  "ocaml_signature": true,
+  "ocaml_module": true,
+  "ppx_module": true,
+}
+
+func isModule(r *rule.Rule) bool {
+  _, isModule := moduleKinds[r.Kind()]
+  return isModule
+}
+
+func isSignature(r *rule.Rule) bool {
+  return r.Kind() == "ocaml_signature"
 }
 
 func slug(name string) string {
@@ -128,7 +163,7 @@ func removeColon(name string) string {
 // TODO general question about attrs like opts and deps_opam: is it more sensible to leave these nil when updating,
 // since they get merged anyway?
 // TODO `deps` is wrong, this needs to use `submodules` or `modules` (`kind.moduleAttr`)
-func existingLibrary(r *rule.Rule, sources Deps) (Library, bool) {
+func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
   if kind, isLib := libKinds[r.Name()]; isLib {
     var modules []string
     for _, name := range r.AttrStrings("deps") {
@@ -137,25 +172,30 @@ func existingLibrary(r *rule.Rule, sources Deps) (Library, bool) {
     }
     nameSlug := slug(r.Name())
     publicName := ruleConfigOr(r, "public_name", nameSlug)
-    lib := Library{
-      Slug: nameSlug,
-      Name: r.Name(),
-      PublicName: publicName,
-      Modules: modules,
-      Opts: nil,
-      DepsOpam: nil,
-      Choices: nil,
-      Auto: contains("auto", tags(r)),
-      Wrapped: kind.wrapped(),
-      Kind: kind,
+    implements := ruleConfigOr(r, "implements", "")
+    lib := Component{
+      slug: nameSlug,
+      name: r.Name(),
+      publicName: publicName,
+      modules: modules,
+      opts: nil,
+      depsOpam: nil,
+      choices: nil,
+      auto: hasTag("auto", r),
+      kind: Library{
+        wrapped: kind.wrapped(),
+        virtualModules: nil,
+        implements: implements,
+        kind: kind,
+      },
     }
     return lib, true
   }
-  return Library{}, false
+  return Component{}, false
 }
 
-func existingLibraries(rules []*rule.Rule, sources Deps) ([]Library, []string) {
-  var libs []Library
+func existingLibraries(rules []*rule.Rule, sources Deps) ([]Component, []string) {
+  var libs []Component
   for _, r := range rules {
     if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }
   }

@@ -8,20 +8,30 @@ import (
 )
 
 type DuneLibDep interface {}
-type DuneLibOpam struct { Name string }
+type DuneLibOpam struct { name string }
 type DuneLibSelect struct { Choice ModuleChoice }
 
+type DuneKind interface {}
+
 type DuneLib struct {
-  Name string
-  PublicName string
-  Modules []string
-  Flags []string
-  Libraries []DuneLibDep
-  Auto bool
-  Wrapped bool
-  Ppx bool
-  Preprocess []string
-  Implements string
+  wrapped bool
+  virtualModules []string
+  implements string
+}
+
+type DuneExe struct {
+}
+
+type DuneComponent struct {
+  name string
+  publicName string
+  modules []string
+  flags []string
+  libraries []DuneLibDep
+  auto bool
+  ppx bool
+  preprocess []string
+  kind DuneKind
 }
 
 func parseDune(code string) SexpList {
@@ -140,8 +150,8 @@ func dunePreprocessors(lib SexpLib) []string {
   return result
 }
 
-func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
-  var libraries []DuneLib
+func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
+  var components []DuneComponent
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
     if isMap && dune.Name == "library" {
@@ -151,22 +161,25 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneLib {
       wrapped := dune.Values["wrapped"] != SexpString{"false"}
       modules := data.list("modules")
       preproc := dunePreprocessors(data)
-      lib := DuneLib{
-        Name: name,
-        PublicName: publicName,
-        Modules: modules,
-        Flags: data.list("flags"),
-        Libraries: duneLibraryDeps(data),
-        Auto: len(modules) == 0,
-        Wrapped: wrapped,
-        Ppx: len(preproc) > 0,
-        Preprocess: preproc,
-        Implements: data.stringOptional("implements"),
+      lib := DuneComponent{
+        name: name,
+        publicName: publicName,
+        modules: data.list("modules"),
+        flags: data.list("flags"),
+        libraries: duneLibraryDeps(data),
+        auto: len(modules) == 0,
+        ppx: len(preproc) > 0,
+        preprocess: preproc,
+        kind: DuneLib{
+          wrapped: wrapped,
+          virtualModules: data.list("virtual_modules"),
+          implements: data.stringOptional("implements"),
+        },
       }
-      libraries = append(libraries, lib)
+      components = append(components, lib)
     }
   }
-  return libraries
+  return components
 }
 
 func contains(target string, items []string) bool {
@@ -201,34 +214,53 @@ func opamDeps(deps []DuneLibDep) []string {
   var result []string
   for _, dep := range deps {
     ld, isOpam := dep.(DuneLibOpam)
-    if isOpam { result = append(result, ld.Name) }
+    if isOpam { result = append(result, ld.name) }
   }
   return result
 }
 
-func dunePpx(deps []string, wrapped bool) Kind {
-  ppx := false
-  if len(deps) > 0 { ppx = true }
-  if wrapped {
-    if ppx { return KindNsPpx{PpxDirect{deps}} } else { return KindNs{} }
+func dunePpx(deps []string) PpxKind {
+  if len(deps) > 0 {
+    return PpxDirect{deps}
   } else {
-    if ppx { return KindPpx{PpxDirect{deps}} } else { return KindPlain{} }
+    return NoPpx{}
   }
 }
 
-func duneToLibrary(dune DuneLib) Library {
-  return Library{
-    Slug: dune.Name,
-    Name: generateLibraryName(dune.Name),
-    PublicName: dune.PublicName,
-    Implements: dune.Implements,
-    Modules: modulesWithSelectOutputs(dune.Modules, dune.Libraries),
-    Opts: dune.Flags,
-    DepsOpam: opamDeps(dune.Libraries),
-    Choices: duneChoices(dune.Libraries),
-    Auto: dune.Auto,
-    Wrapped: dune.Wrapped,
-    Kind: dunePpx(dune.Preprocess, dune.Wrapped),
+func libKind(ppx bool, wrapped bool) LibraryKind {
+  if ppx {
+    if wrapped { return LibNsPpx{} } else { return LibPpx{} }
+  } else {
+    if wrapped { return LibNs{} } else { return LibPlain{} }
+  }
+}
+
+func duneKindToOBazl(dune DuneComponent, ppx PpxKind) ComponentKind {
+  if lib, isLib := dune.kind.(DuneLib); isLib {
+    return Library{
+      wrapped: lib.wrapped,
+      virtualModules: lib.virtualModules,
+      implements: lib.implements,
+      kind: libKind(ppx.isPpx(), lib.wrapped),
+    }
+  } else {
+    return Executable{}
+  }
+}
+
+func duneToOBazl(dune DuneComponent) Component {
+  ppx := dunePpx(dune.preprocess)
+  return Component{
+    slug: dune.name,
+    name: generateLibraryName(dune.name),
+    publicName: dune.publicName,
+    modules: modulesWithSelectOutputs(dune.modules, dune.libraries),
+    opts: dune.flags,
+    depsOpam: opamDeps(dune.libraries),
+    choices: duneChoices(dune.libraries),
+    auto: dune.auto,
+    ppx: ppx,
+    kind: duneKindToOBazl(dune, ppx),
   }
 }
 

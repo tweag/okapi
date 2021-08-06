@@ -1,0 +1,6 @@
+load("@okapi//bzl:generate.bzl", "generate")
+
+generate()
+
+# gazelle:exclude bazel
+# gazelle:exclude _build

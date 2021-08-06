@@ -1,4 +1,4 @@
-package bazel_test
+package basic_test
 
 import (
   "io/ioutil"
@@ -60,13 +60,6 @@ end
  (public_name sub-extra-lib)
  (libraries a virt)
  (modules foo bar))
-
-(library
- (name virt_impl)
- (public_name virt_impl)
- (implements virt)
- (modules virt1)
-)
 -- a/sub/bar.ml --
 module Bar = struct
   let sub a = a
@@ -82,7 +75,35 @@ end
 module Sub = struct
   let sub a = a
 end
--- a/sub/virt1.ml --
+-- b/virt/virt.mli --
+-- b/virt/dune --
+(library
+  (name virt)
+  (public_name virt)
+  (virtual_modules virt)
+)
+-- b/impl1/virt.ml --
+-- b/impl1/dune --
+(library
+ (name impl1)
+ (public_name impl1)
+ (implements virt)
+ (modules virt)
+)
+-- b/impl2/virt.ml --
+-- b/impl2/dune --
+(library
+ (name impl2)
+ (public_name impl2)
+ (implements virt)
+ (modules virt)
+-- b/exe/dune --
+(executable
+ (name main)
+ (public_name exe)
+ (libraries dep impl plain)
+  )
+)
 `,
   WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
@@ -208,7 +229,6 @@ ocaml_module(
     deps = [
         ":bar",
         "//a:#A",
-        "//a/sub:#Virt_impl",
     ],
 )
 
@@ -216,10 +236,7 @@ ocaml_module(
     name = "bar",
     opts = [],
     struct = ":bar.ml",
-    deps = [
-        "//a:#A",
-        "//a/sub:#Virt_impl",
-    ],
+    deps = ["//a:#A"],
 )
 
 # okapi:public_name sub-extra-lib
@@ -247,6 +264,15 @@ ocaml_ns_library(
 )
 `
 
+const virtBuildTarget = `
+`
+
+const impl1BuildTarget = `
+`
+
+const impl2BuildTarget = `
+`
+
 func checkFile(t *testing.T, ws string, target string, path... string) {
   rel := filepath.Join(path...)
   file := filepath.Join(strings.TrimSpace(ws), rel)
@@ -263,6 +289,9 @@ func TestBuild(t *testing.T) {
   if err != nil { t.Fatal(err) }
   checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
   checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
+  checkFile(t, ws, virtBuildTarget, "b", "virt", "BUILD.bazel")
+  checkFile(t, ws, impl1BuildTarget, "b", "impl1", "BUILD.bazel")
+  checkFile(t, ws, impl2BuildTarget, "b", "impl2", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) {

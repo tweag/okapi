@@ -1,13 +1,13 @@
 package okapi
 
 import (
-	"fmt"
-	"log"
+  "fmt"
+  "log"
 
-	"github.com/bazelbuild/bazel-gazelle/config"
-	"github.com/bazelbuild/bazel-gazelle/label"
-	"github.com/bazelbuild/bazel-gazelle/resolve"
-	"github.com/bazelbuild/bazel-gazelle/rule"
+  "github.com/bazelbuild/bazel-gazelle/config"
+  "github.com/bazelbuild/bazel-gazelle/label"
+  "github.com/bazelbuild/bazel-gazelle/resolve"
+  "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
 type ResolvedLocal struct { label label.Label }
@@ -28,10 +28,20 @@ func resolveDep(c *config.Config, ix *resolve.RuleIndex, dep string) interface{}
     return ResolvedLocal{r.Label}
   } else {
     log.Fatalf("Multiple libraries matched the depspec `%s`: %#v", dep, results)
-    return nil
   }
+  return nil
 }
 
+func appendLabels(r *rule.Rule, attr string, deps []label.Label) {
+  var names []string
+  for _, d := range deps {
+    names = append(names, d.String())
+  }
+  if len(deps) > 0 { r.SetAttr(attr, append(r.AttrStrings(attr), names...)) }
+}
+
+// If the `sig` attr for the module implementing a virtual module isn't set, a `.mli` will be generated and `ocamlfind`
+// will print a warning due to multiple `.cmi` files in the include path.
 func libraryDeps(
   c *config.Config,
   ix *resolve.RuleIndex,
@@ -49,16 +59,37 @@ func libraryDeps(
       } else if _, isOpam := resolved.(ResolvedOpam); isOpam {
         opams = append(opams, dep)
       }
+      for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s", dep)) {
+        locals = append(locals, sig.Label.String())
+      }
     }
-    if len(locals) > 0 { r.SetAttr("deps", append(r.AttrStrings("deps"), locals...)) }
-    if len(opams) > 0 { r.SetAttr("deps_opam", opams) }
+    if virt, exists := ruleConfig(r, "implements"); exists && r.AttrString("sig") == "" {
+      for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s:%s_sig", virt, r.Name())) {
+        r.SetAttr("sig", sig.Label.String())
+      }
+    }
+    extendAttr(r, "deps", locals)
+    extendAttr(r, "deps_opam", opams)
   } else {
     log.Fatalf("Invalid type for imports of source file %s: %#v", r.Name(), imports)
   }
 }
 
-func implementationDeps(c *config.Config, ix *resolve.RuleIndex, r *rule.Rule, lib string) {
-  log.Print(lib)
-  sig := resolveDep(c, ix, fmt.Sprintf("virt:%s:%s_sig", lib, r.Name()))
-  log.Print(sig)
+func executableDeps(
+  c *config.Config,
+  ix *resolve.RuleIndex,
+  imports interface{},
+  r *rule.Rule,
+) {
+  if deps, isStrings := imports.([]string); isStrings {
+    var impls []string
+    for _, dep := range deps {
+      for _, lib := range findImport(c, ix, fmt.Sprintf("implementation:%s", dep)) {
+        impls = append(impls, lib.Label.String())
+      }
+    }
+    extendAttr(r, "deps", impls)
+  } else {
+    log.Fatalf("Invalid type for imports of executable %s: %#v", r.Name(), imports)
+  }
 }

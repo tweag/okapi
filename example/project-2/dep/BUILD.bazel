@@ -1,0 +1,28 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_library", "ocaml_module", "ocaml_signature")
+
+ocaml_signature(
+    name = "dep_sig",
+    src = ":dep.mli",
+    deps = [
+        "@okapi-test//virt:lib-virt",
+        "@okapi-test//virt:virt_sig",
+    ],
+)
+
+ocaml_module(
+    name = "dep",
+    sig = ":dep_sig",
+    struct = ":dep.ml",
+    deps = [
+        "@okapi-test//virt:lib-virt",
+        "@okapi-test//virt:virt_sig",
+    ],
+)
+
+# okapi:auto
+# okapi:public_name dep
+ocaml_library(
+    name = "lib-dep",
+    modules = [":dep"],
+    visibility = ["//visibility:public"],
+)

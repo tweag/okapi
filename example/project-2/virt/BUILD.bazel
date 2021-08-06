@@ -1,0 +1,17 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_library", "ocaml_signature")
+
+# okapi:virt virt
+ocaml_signature(
+    name = "virt_sig",
+    src = ":virt.mli",
+    opts = ["-no-keep-locs"],
+    visibility = ["//visibility:public"],
+)
+
+# okapi:auto
+# okapi:public_name virt
+ocaml_library(
+    name = "lib-virt",
+    modules = [],
+    visibility = ["//visibility:public"],
+)

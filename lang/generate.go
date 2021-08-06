@@ -11,17 +11,12 @@ import (
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
-func generateLibraryName(name string) string {
-  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
-}
-
 func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
   sort.Strings(keys)
   lib := Component{
-    slug: name,
-    name: generateLibraryName(name),
+    name: name,
     publicName: name,
     modules: keys,
     opts: nil,
@@ -42,12 +37,12 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
 func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
   conf := parseDuneFile(duneCode)
   duneLibs := DecodeDuneConfig(name, conf)
-  var libs []Component
+  var components []Component
   for _, dune := range duneLibs {
-    libs = append(libs, duneToOBazl(dune))
+    components = append(components, duneToOBazl(dune))
   }
-  auto := autoModules(libs, sources)
-  return multilib(libs, sources, auto)
+  auto := autoModules(components, sources)
+  return multilib(components, sources, auto)
 }
 
 func GenerateRules(dir string, sources Deps, dune string) []RuleResult {
@@ -146,6 +141,16 @@ func isSignature(r *rule.Rule) bool {
   return r.Kind() == "ocaml_signature"
 }
 
+var executableKinds = map[string]bool {
+  "ocaml_executable": true,
+  "ppx_executable": true,
+}
+
+func isExecutable(r *rule.Rule) bool {
+  _, isExecutable := executableKinds[r.Kind()]
+  return isExecutable
+}
+
 func slug(name string) string {
   rex := regexp.MustCompile("#([[:upper:]])(.*)")
   match := rex.FindStringSubmatch(name)
@@ -174,8 +179,7 @@ func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
     publicName := ruleConfigOr(r, "public_name", nameSlug)
     implements := ruleConfigOr(r, "implements", "")
     lib := Component{
-      slug: nameSlug,
-      name: r.Name(),
+      name: nameSlug,
       publicName: publicName,
       modules: modules,
       opts: nil,

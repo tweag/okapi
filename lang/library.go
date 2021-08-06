@@ -3,6 +3,7 @@ package okapi
 import (
   "fmt"
   "sort"
+  "strings"
 
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
@@ -124,22 +125,32 @@ type Executable struct {
 }
 
 func moduleAttr(wrapped bool) string {
-  if wrapped { return "modules" } else { return "submodules" }
+  if wrapped { return "submodules" } else { return "modules" }
+}
+
+func nsName(name string) string {
+  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
 }
 
 func (lib Library) componentRule(component Component) *rule.Rule {
-  r := rule.NewRule(lib.kind.ruleName(), component.name)
+  libName := "lib-" + component.name
+  if lib.wrapped { libName = nsName(component.name) }
+  r := rule.NewRule(lib.kind.ruleName(), libName)
   r.SetAttr(moduleAttr(lib.wrapped), targetNames(component.modules))
-  if lib.implements != "" { r.AddComment("# okapi:implements " + lib.implements) }
+  if lib.implements != "" {
+    r.AddComment("# okapi:implements " + lib.implements)
+    r.AddComment("# okapi:implementation " + component.publicName)
+  }
   return r
 }
 
 func (exe Executable) componentRule(component Component) *rule.Rule {
-  return rule.NewRule(exe.kind.ruleName(), component.name)
+  r := rule.NewRule(exe.kind.ruleName(), component.publicName)
+  r.SetAttr("main", component.name)
+  return r
 }
 
 type Component struct {
-  slug string
   name string
   publicName string
   modules []string
@@ -163,11 +174,21 @@ func targetNames(deps []string) []string {
   return result
 }
 
+func extendAttr(r *rule.Rule, attr string, vs []string) {
+  if len(vs) > 0 {
+    r.SetAttr(attr, append(r.AttrStrings(attr), vs...))
+  }
+}
+
+func appendAttr(r *rule.Rule, attr string, v string) {
+  r.SetAttr(attr, append(r.AttrStrings(attr), v))
+}
+
 func commonAttrs(lib Component, r *rule.Rule, deps []string) RuleResult {
   libDeps := append(lib.depsOpam, lib.ppx.depsOpam()...)
-  r.SetAttr("opts", lib.opts)
+  extendAttr(r, "opts", lib.opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  addAttrs(lib.slug, r, lib.ppx)
+  addAttrs(lib.name, r, lib.ppx)
   return RuleResult{r, libDeps}
 }
 
@@ -182,6 +203,8 @@ func signatureRule(src Source) *rule.Rule {
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
   r := signatureRule(src)
   r.AddComment(fmt.Sprintf("# okapi:virt %s", libName))
+  r.SetAttr("visibility", []string{"//visibility:public"})
+  appendAttr(r, "opts", "-no-keep-locs")
   return r
 }
 
@@ -195,6 +218,7 @@ func moduleRule(component Component, src Source) *rule.Rule {
   if src.Intf {
     r.SetAttr("sig", ":" + sigTarget(src))
   } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
+    appendAttr(r, "opts", "-no-keep-locs")
     r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
   }
   return r
@@ -221,7 +245,7 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
 
 func sourceRules(sources Deps, component Component) []RuleResult {
   var rules []RuleResult
-  rules = append(rules, extraRules(component.ppx, component.slug)...)
+  rules = append(rules, extraRules(component.ppx, component.name)...)
   for _, name := range component.modules {
     src, srcExists := sources[name]
     if !srcExists { src = Source{name, false, false, nil} }
@@ -230,7 +254,7 @@ func sourceRules(sources Deps, component Component) []RuleResult {
     rules = append(rules, commonAttrs(component, moduleRule(component, src), cleanDeps))
   }
   if lib, isLib := component.kind.(Library); isLib {
-    librarySourceRules(component, lib, sources)
+    rules = append(rules, librarySourceRules(component, lib, sources)...)
   }
   return rules
 }
@@ -238,16 +262,16 @@ func sourceRules(sources Deps, component Component) []RuleResult {
 func setLibraryModules(component Component, r *rule.Rule) {
 }
 
-func componentRule(component Component) *rule.Rule {
+func componentRule(component Component) RuleResult {
   r := component.kind.componentRule(component)
   if component.auto { r.AddComment("# okapi:auto") }
   r.AddComment("# okapi:public_name " + component.publicName)
   r.SetAttr("visibility", []string{"//visibility:public"})
-  return r
+  return RuleResult{r, component.depsOpam}
 }
 
 func component(sources Deps, component Component) []RuleResult {
-  return append(sourceRules(sources, component), RuleResult{componentRule(component), nil})
+  return append(sourceRules(sources, component), componentRule(component))
 }
 
 // Update an existing build that has been manually amended by the user to contain more than one library.

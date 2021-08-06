@@ -61,7 +61,7 @@ ocaml_module(
 # okapi:public_name sub-lib
 ocaml_ns_library(
     name = "#Sub_lib",
-    submodules = [
+    modules = [
         ":final",
         ":new",
         ":sub",
@@ -86,6 +86,7 @@ ocaml_signature(
     deps = [
         ":bar",
         "@okapi-test//a:#A",
+        "@okapi-test//b/virt:#Virt",
     ],
 )
 
@@ -101,6 +102,7 @@ ppx_module(
     deps = [
         ":bar",
         "@okapi-test//a:#A",
+        "@okapi-test//b/virt:#Virt",
     ],
 )
 
@@ -112,13 +114,16 @@ ppx_module(
     ppx_print = "@ppx//print:text",
     ppx_tags = ["inline-test"],
     struct = ":bar.ml",
-    deps = ["@okapi-test//a:#A"],
+    deps = [
+        "@okapi-test//a:#A",
+        "@okapi-test//b/virt:#Virt",
+    ],
 )
 
 # okapi:public_name sub-extra-lib
 ppx_ns_library(
     name = "#Sub_extra_lib",
-    submodules = [
+    modules = [
         ":bar",
         ":foo",
     ],

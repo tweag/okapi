@@ -1,0 +1,6 @@
+(library
+  (name dep)
+  (wrapped false)
+  (public_name dep)
+  (libraries virt)
+  )

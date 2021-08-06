@@ -6,3 +6,4 @@
 /test/*/bazel-*
 /test/*/bazel/
 /test/temp/
+_build

@@ -1,0 +1,21 @@
+workspace(name = "okapi-test")
+
+local_repository(
+    name = "okapi",
+    path = "../..",
+)
+
+load("@okapi//bzl:deps.bzl", "okapi_deps")
+okapi_deps()
+
+load("@okapi//bzl:setup.bzl", "okapi_setup_nix")
+okapi_setup_nix()
+
+load("@obazl_rules_ocaml//ocaml:providers.bzl", "BuildConfig", "OpamConfig")
+opam = OpamConfig(
+    version = "2.0",
+    builds = { "4.10": BuildConfig(default = True, switch = "4.10", compiler = "4.10", packages = { "ocaml": [] }) },
+)
+
+load("@obazl_rules_ocaml//ocaml:bootstrap.bzl", "ocaml_configure")
+ocaml_configure(build = "4.10", opam = opam)

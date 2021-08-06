@@ -150,15 +150,28 @@ func dunePreprocessors(lib SexpLib) []string {
   return result
 }
 
+func decodeDuneComponent(lib SexpLib) DuneKind {
+  wrapped := lib.data.Values["wrapped"] != SexpString{"false"}
+  if lib.data.Name == "library" {
+    return DuneLib{
+      wrapped: wrapped,
+      virtualModules: lib.list("virtual_modules"),
+      implements: lib.stringOptional("implements"),
+    }
+  } else if lib.data.Name == "executable" {
+    return DuneExe{}
+  }
+  return nil
+}
+
 func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
   var components []DuneComponent
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
-    if isMap && dune.Name == "library" {
+    if isMap && (dune.Name == "library" || dune.Name == "executable") {
       data := SexpLib{libName, dune}
       name := data.string("name")
       publicName := data.stringOr("public_name", name)
-      wrapped := dune.Values["wrapped"] != SexpString{"false"}
       modules := data.list("modules")
       preproc := dunePreprocessors(data)
       lib := DuneComponent{
@@ -170,11 +183,7 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
         auto: len(modules) == 0,
         ppx: len(preproc) > 0,
         preprocess: preproc,
-        kind: DuneLib{
-          wrapped: wrapped,
-          virtualModules: data.list("virtual_modules"),
-          implements: data.stringOptional("implements"),
-        },
+        kind: decodeDuneComponent(data),
       }
       components = append(components, lib)
     }
@@ -244,15 +253,18 @@ func duneKindToOBazl(dune DuneComponent, ppx PpxKind) ComponentKind {
       kind: libKind(ppx.isPpx(), lib.wrapped),
     }
   } else {
-    return Executable{}
+    var kind ExeKind = ExePlain{}
+    if ppx.isPpx() { kind = ExePpx{} }
+    return Executable{
+      kind: kind,
+    }
   }
 }
 
 func duneToOBazl(dune DuneComponent) Component {
   ppx := dunePpx(dune.preprocess)
   return Component{
-    slug: dune.name,
-    name: generateLibraryName(dune.name),
+    name: dune.name,
     publicName: dune.publicName,
     modules: modulesWithSelectOutputs(dune.modules, dune.libraries),
     opts: dune.flags,

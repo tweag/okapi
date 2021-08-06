@@ -15,5 +15,5 @@
  (name sub_extra_lib)
  (public_name sub-extra-lib)
  (preprocess (pps ppx_inline_test))
- (libraries a)
+ (libraries a virt)
  (modules foo bar))

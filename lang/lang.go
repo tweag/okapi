@@ -58,6 +58,9 @@ var kinds = map[string]rule.KindInfo {
   "ppx_library": defaultKind,
   "ocaml_ns_library": defaultKind,
   "ocaml_library": defaultKind,
+  "filegroup": defaultKind,
+  "ocaml_executable": defaultKind,
+  "ppx_executable": defaultKind,
 }
 
 func (*okapiLang) Kinds() map[string]rule.KindInfo { return kinds }
@@ -68,10 +71,13 @@ func (*okapiLang) Loads() []rule.LoadInfo {
       Name: "@obazl_rules_ocaml//ocaml:rules.bzl",
       Symbols: []string{
         "ocaml_ns_library",
+        "ocaml_library",
         "ppx_ns_library",
+        "ppx_library",
         "ocaml_module",
         "ppx_module",
         "ocaml_signature",
+        "ocaml_executable",
         "ppx_executable",
       },
       After: nil,
@@ -91,8 +97,12 @@ func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolv
     if name, exists := ruleConfig(r, "implements"); exists {
       imports = append(imports, importSpec("impl:" + name))
     }
+    if name, exists := ruleConfig(r, "implementation"); exists {
+      imports = append(imports, importSpec("implementation:" + name))
+    }
   } else if isSignature(r) {
     if lib, exists := ruleConfig(r, "virt"); exists {
+      imports = append(imports, importSpec(fmt.Sprintf("virt:%s", lib)))
       imports = append(imports, importSpec(fmt.Sprintf("virt:%s:%s", lib, r.Name())))
     }
   }
@@ -109,14 +119,8 @@ func (*okapiLang) Resolve(
   imports interface{},
   from label.Label,
 ) {
-  if isSource(r) {
-    libraryDeps(c, ix, imports, r)
-    if isModule(r) {
-      if lib, exists := ruleConfig(r, "implements"); exists {
-        implementationDeps(c, ix, r, lib)
-      }
-    }
-  }
+  if isSource(r) { libraryDeps(c, ix, imports, r) }
+  if isExecutable(r) { executableDeps(c, ix, imports, r) }
 }
 
 func containsLibrary(rules []*rule.Rule) bool {
@@ -133,9 +137,7 @@ var emptyResult = language.GenerateResult{
 func containsOcaml(args language.GenerateArgs) bool {
   for _, file := range args.RegularFiles {
     ext := filepath.Ext(file)
-    if ext == ".ml" || ext == ".mli" {
-      return true
-    }
+    if ext == ".ml" || ext == ".mli" { return true }
   }
   return false
 }

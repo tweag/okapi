@@ -1,9 +1,9 @@
 load("@io_bazel_rules_go//go/tools/bazel_testing:def.bzl", "go_bazel_test")
 
 go_bazel_test(
-    name = "bazel_test",
+    name = "test",
     srcs = [
-        "project_test.go",
+        "virtual_test.go",
     ],
     rule_files = [
         "@okapi//:all_files",

@@ -1,0 +1,5 @@
+(library
+  (name plain)
+  (public_name plain)
+  (wrapped false)
+  )

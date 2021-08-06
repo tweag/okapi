@@ -1,0 +1,20 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_library", "ocaml_module", "ocaml_signature")
+
+ocaml_signature(
+    name = "plain_sig",
+    src = ":plain.mli",
+)
+
+ocaml_module(
+    name = "plain",
+    sig = ":plain_sig",
+    struct = ":plain.ml",
+)
+
+# okapi:auto
+# okapi:public_name plain
+ocaml_library(
+    name = "lib-plain",
+    modules = [":plain"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,20 @@
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_executable", "ocaml_module")
+
+ocaml_module(
+    name = "main",
+    struct = ":main.ml",
+    deps = [
+        "@okapi-test//dep:lib-dep",
+        "@okapi-test//impl:lib-impl",
+        "@okapi-test//plain:lib-plain",
+    ],
+)
+
+# okapi:auto
+# okapi:public_name exe
+ocaml_executable(
+    name = "exe",
+    main = "main",
+    visibility = ["//visibility:public"],
+    deps = ["@okapi-test//impl:lib-impl"],
+)

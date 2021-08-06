@@ -1,0 +1,1 @@
+val number : int -> int

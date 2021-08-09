@@ -58,7 +58,7 @@ end
 (library
  (name sub_extra_lib)
  (public_name sub-extra-lib)
- (libraries a virt)
+ (libraries a)
  (modules foo bar))
 -- a/sub/bar.ml --
 module Bar = struct
@@ -75,35 +75,6 @@ end
 module Sub = struct
   let sub a = a
 end
--- b/virt/virt.mli --
--- b/virt/dune --
-(library
-  (name virt)
-  (public_name virt)
-  (virtual_modules virt)
-)
--- b/impl1/virt.ml --
--- b/impl1/dune --
-(library
- (name impl1)
- (public_name impl1)
- (implements virt)
- (modules virt)
-)
--- b/impl2/virt.ml --
--- b/impl2/dune --
-(library
- (name impl2)
- (public_name impl2)
- (implements virt)
- (modules virt)
--- b/exe/dune --
-(executable
- (name main)
- (public_name exe)
- (libraries dep impl plain)
-  )
-)
 `,
   WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
@@ -119,13 +90,11 @@ const aBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module"
 ocaml_signature(
     name = "a2_sig",
     src = ":a2.mli",
-    opts = [],
     deps = [":f1"],
 )
 
 ocaml_module(
     name = "a2",
-    opts = [],
     sig = ":a2_sig",
     struct = ":a2.ml",
     deps = [":f1"],
@@ -133,7 +102,6 @@ ocaml_module(
 
 ocaml_module(
     name = "a3",
-    opts = [],
     struct = ":a3.ml",
     deps = [
         ":a2",
@@ -144,12 +112,10 @@ ocaml_module(
 ocaml_signature(
     name = "f1_sig",
     src = ":f1.mli",
-    opts = [],
 )
 
 ocaml_module(
     name = "f1",
-    opts = [],
     sig = ":f1_sig",
     struct = ":f1.ml",
 )
@@ -224,7 +190,6 @@ ppx_ns_library(
 
 ocaml_module(
     name = "foo",
-    opts = [],
     struct = ":foo.ml",
     deps = [
         ":bar",
@@ -234,7 +199,6 @@ ocaml_module(
 
 ocaml_module(
     name = "bar",
-    opts = [],
     struct = ":bar.ml",
     deps = ["//a:#A"],
 )
@@ -248,29 +212,6 @@ ocaml_ns_library(
     ],
     visibility = ["//visibility:public"],
 )
-
-ocaml_module(
-    name = "virt1",
-    opts = [],
-    struct = ":virt1.ml",
-)
-
-# okapi:public_name virt_impl
-# okapi:implements virt
-ocaml_ns_library(
-    name = "#Virt_impl",
-    submodules = [":virt1"],
-    visibility = ["//visibility:public"],
-)
-`
-
-const virtBuildTarget = `
-`
-
-const impl1BuildTarget = `
-`
-
-const impl2BuildTarget = `
 `
 
 func checkFile(t *testing.T, ws string, target string, path... string) {
@@ -289,9 +230,6 @@ func TestBuild(t *testing.T) {
   if err != nil { t.Fatal(err) }
   checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
   checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
-  checkFile(t, ws, virtBuildTarget, "b", "virt", "BUILD.bazel")
-  checkFile(t, ws, impl1BuildTarget, "b", "impl1", "BUILD.bazel")
-  checkFile(t, ws, impl2BuildTarget, "b", "impl2", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) {

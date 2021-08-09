@@ -69,8 +69,12 @@ func extraRules(kind PpxKind, slug string) []RuleResult {
   return nil
 }
 
+func nsLibraryName(name string) string {
+  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
+}
+
 type LibraryKind interface {
-  ruleName() string
+  ruleKind() string
   ppx() bool
   wrapped() bool
 }
@@ -80,10 +84,10 @@ type LibNs struct {}
 type LibPpx struct {}
 type LibPlain struct {}
 
-func (LibNsPpx) ruleName() string { return "ppx_ns_library" }
-func (LibNs) ruleName() string { return "ocaml_ns_library" }
-func (LibPpx) ruleName() string { return "ppx_library" }
-func (LibPlain) ruleName() string { return "ocaml_library" }
+func (LibNsPpx) ruleKind() string { return "ppx_ns_library" }
+func (LibNs) ruleKind() string { return "ocaml_ns_library" }
+func (LibPpx) ruleKind() string { return "ppx_library" }
+func (LibPlain) ruleKind() string { return "ocaml_library" }
 
 func (LibNsPpx) ppx() bool { return true }
 func (LibNs) ppx() bool { return false }
@@ -96,15 +100,15 @@ func (LibPpx) wrapped() bool { return false }
 func (LibPlain) wrapped() bool { return false }
 
 type ExeKind interface {
-  ruleName() string
+  ruleKind() string
   ppx() bool
 }
 
 type ExePpx struct {}
 type ExePlain struct {}
 
-func (ExePpx) ruleName() string { return "ppx_executable" }
-func (ExePlain) ruleName() string { return "ocaml_executable" }
+func (ExePpx) ruleKind() string { return "ppx_executable" }
+func (ExePlain) ruleKind() string { return "ocaml_executable" }
 
 func (ExePpx) ppx() bool { return true }
 func (ExePlain) ppx() bool { return false }
@@ -114,7 +118,6 @@ type ComponentKind interface {
 }
 
 type Library struct {
-  wrapped bool
   virtualModules []string
   implements string
   kind LibraryKind
@@ -134,9 +137,9 @@ func nsName(name string) string {
 
 func (lib Library) componentRule(component Component) *rule.Rule {
   libName := "lib-" + component.name
-  if lib.wrapped { libName = nsName(component.name) }
-  r := rule.NewRule(lib.kind.ruleName(), libName)
-  r.SetAttr(moduleAttr(lib.wrapped), targetNames(component.modules))
+  if lib.kind.wrapped() { libName = nsName(component.name) }
+  r := rule.NewRule(lib.kind.ruleKind(), libName)
+  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(component.modules))
   if lib.implements != "" {
     r.AddComment("# okapi:implements " + lib.implements)
     r.AddComment("# okapi:implementation " + component.publicName)
@@ -145,7 +148,7 @@ func (lib Library) componentRule(component Component) *rule.Rule {
 }
 
 func (exe Executable) componentRule(component Component) *rule.Rule {
-  r := rule.NewRule(exe.kind.ruleName(), component.publicName)
+  r := rule.NewRule(exe.kind.ruleKind(), component.publicName)
   r.SetAttr("main", component.name)
   return r
 }
@@ -175,9 +178,7 @@ func targetNames(deps []string) []string {
 }
 
 func extendAttr(r *rule.Rule, attr string, vs []string) {
-  if len(vs) > 0 {
-    r.SetAttr(attr, append(r.AttrStrings(attr), vs...))
-  }
+  if len(vs) > 0 { r.SetAttr(attr, append(r.AttrStrings(attr), vs...)) }
 }
 
 func appendAttr(r *rule.Rule, attr string, v string) {

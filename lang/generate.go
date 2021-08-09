@@ -25,7 +25,6 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
     auto: true,
     ppx: NoPpx{},
     kind: Library{
-      wrapped: false,
       virtualModules: nil,
       implements: "",
       kind: LibNs{},
@@ -187,7 +186,6 @@ func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
       choices: nil,
       auto: hasTag("auto", r),
       kind: Library{
-        wrapped: kind.wrapped(),
         virtualModules: nil,
         implements: implements,
         kind: kind,

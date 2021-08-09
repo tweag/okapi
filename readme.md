@@ -153,7 +153,9 @@ correct source file has to be done manually, since there is no (easy) way to che
 Preprocessors are supported as well, causing the addition of a `ppx_executable`, which is then referenced by the
 library's modules, using the rules `ppx_module` and `ppx_ns_library`.
 
-Virtual modules are supported.
+Virtual modules are supported, but they use `-no-keep-locs` to work around an issue that is introduced by Bazel.
+
+## Example
 
 Given a Dune config like this:
 
@@ -294,6 +296,17 @@ ocaml_ns_library(
 ```
 
 This would only be relevant when using a mix of Dune and automatic builds.
+
+# Tests
+
+The project contains basic Go unit tests as well as Bazel integration tests.
+
+They can be executed, respectively, with:
+
+```sh
+$ bazel test '//lang:*'
+$ bazel test '//test/...'
+```
 
 [Gazelle]: https://github.com/bazelbuild/bazel-gazelle
 [OBazl]: https://github.com/obazl/rules_ocaml

@@ -247,7 +247,6 @@ func libKind(ppx bool, wrapped bool) LibraryKind {
 func duneKindToOBazl(dune DuneComponent, ppx PpxKind) ComponentKind {
   if lib, isLib := dune.kind.(DuneLib); isLib {
     return Library{
-      wrapped: lib.wrapped,
       virtualModules: lib.virtualModules,
       implements: lib.implements,
       kind: libKind(ppx.isPpx(), lib.wrapped),

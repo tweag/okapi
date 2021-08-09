@@ -1,8 +1,8 @@
 package okapi
 
 import (
-	"reflect"
-	"testing"
+  "reflect"
+  "testing"
 )
 
 const duneFile = `(library
@@ -28,11 +28,12 @@ const duneFile = `(library
 func TestDune(t *testing.T) {
   sexp := parseDune(duneFile)
   output := DecodeDuneConfig("test", sexp)
-  target1 := DuneLib{
-  	Name: "sub_lib",
-  	Modules: nil,
-  	Flags: []string{"-open", "Angstrom"},
-  	Libraries: []DuneLibDep{
+  target1 := DuneComponent{
+    name: "sub_lib",
+    publicName: "sub-lib",
+    modules: nil,
+    flags: []string{"-open", "Angstrom"},
+    libraries: []DuneLibDep{
       DuneLibOpam{"angstrom"},
       DuneLibOpam{"re"},
       DuneLibOpam{"ipaddr"},
@@ -41,22 +42,31 @@ func TestDune(t *testing.T) {
         {"", "choice2.ml"},
       }}},
     },
-  	Auto: true,
-  	Wrapped: true,
-  	Ppx: false,
-  	Preprocess: nil,
+    auto: true,
+    ppx: false,
+    preprocess: nil,
+    kind: DuneLib{
+      wrapped: true,
+      virtualModules: nil,
+      implements: "",
+    },
   }
-  target2 := DuneLib{
-  	Name: "sub_extra_lib",
-  	Modules: []string{"foo", "bar"},
-  	Flags: nil,
-  	Libraries: nil,
-  	Auto: false,
-  	Wrapped: true,
-  	Ppx: true,
-  	Preprocess: []string{"ppx_inline_test"},
+  target2 := DuneComponent{
+    name: "sub_extra_lib",
+    publicName: "sub-extra-lib",
+    modules: []string{"foo", "bar"},
+    flags: nil,
+    libraries: nil,
+    auto: false,
+    ppx: true,
+    preprocess: []string{"ppx_inline_test"},
+    kind: DuneLib{
+      wrapped: true,
+      virtualModules: nil,
+      implements: "",
+    },
   }
-  targets := []DuneLib{target1, target2}
+  targets := []DuneComponent{target1, target2}
   if !reflect.DeepEqual(output, targets) {
     t.Fatalf("Dune library differs.\nOutput:\n%#v\nTarget:\n%#v", output, targets)
   }

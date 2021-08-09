@@ -15,15 +15,15 @@ var testArgs = bazel_testing.Args{
 load("@okapi//bzl:generate.bzl", "generate")
 
 generate()
--- virt/virt.mli --
+-- virt/virty.mli --
 val base : int
 -- virt/dune --
 (library
   (name virt)
   (public_name virt)
-  (virtual_modules virt)
+  (virtual_modules virty)
 )
--- impl1/virt.ml --
+-- impl1/virty.ml --
 let base = 21
 -- dep/dune --
 (library
@@ -31,25 +31,25 @@ let base = 21
   (public_name dep)
   (libraries virt)
   )
--- dep/dep.mli --
+-- dep/deppy.mli --
 val number : int -> int
--- dep/dep.ml --
+-- dep/deppy.ml --
 let number a = Virt.base + a
 -- impl1/dune --
 (library
  (name impl1)
  (public_name impl1)
  (implements virt)
- (modules virt)
+ (modules virty)
 )
--- impl2/virt.ml --
+-- impl2/virty.ml --
 let base = 63
 -- impl2/dune --
 (library
  (name impl2)
  (public_name impl2)
  (implements virt)
- (modules virt)
+ (modules virty)
 -- exe/dune --
 (executable
  (name main)
@@ -69,15 +69,13 @@ okapi_setup_legacy()
 `,
 }
 
-// TODO maybe not create a library rule?
 const virtBuildTarget = `
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_ns_library", "ocaml_signature")
 
 # okapi:virt virt
 ocaml_signature(
-    name = "virt_sig",
-    src = ":virt.mli",
-    opts = ["-no-keep-locs"],
+    name = "virty",
+    src = ":virty.mli",
     visibility = ["//visibility:public"],
 )
 
@@ -85,7 +83,7 @@ ocaml_signature(
 # okapi:public_name virt
 ocaml_ns_library(
     name = "#Virt",
-    submodules = [],
+    submodules = [":virty"],
     visibility = ["//visibility:public"],
 )
 `
@@ -95,10 +93,10 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
 
 # okapi:implements virt
 ocaml_module(
-    name = "virt",
-    opts = ["-no-keep-locs"],
-    sig = "//virt:virt_sig",
-    struct = ":virt.ml",
+    name = "virty",
+    sig = "//virt:virty",
+    struct = ":virty.ml",
+    deps = ["//virt:#Virt"],
 )
 
 # okapi:implements virt
@@ -106,7 +104,7 @@ ocaml_module(
 # okapi:public_name impl1
 ocaml_ns_library(
     name = "#Impl1",
-    submodules = [":virt"],
+    submodules = [":virty"],
     visibility = ["//visibility:public"],
 )
 `
@@ -116,10 +114,10 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
 
 # okapi:implements virt
 ocaml_module(
-    name = "virt",
-    opts = ["-no-keep-locs"],
-    sig = "//virt:virt_sig",
-    struct = ":virt.ml",
+    name = "virty",
+    sig = "//virt:virty",
+    struct = ":virty.ml",
+    deps = ["//virt:#Virt"],
 )
 
 # okapi:implements virt
@@ -127,7 +125,7 @@ ocaml_module(
 # okapi:public_name impl2
 ocaml_ns_library(
     name = "#Impl2",
-    submodules = [":virt"],
+    submodules = [":virty"],
     visibility = ["//visibility:public"],
 )
 `
@@ -136,29 +134,23 @@ const depBuildTarget = `
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_signature(
-    name = "dep_sig",
-    src = ":dep.mli",
-    deps = [
-        "//virt:#Virt",
-        "//virt:virt_sig",
-    ],
+    name = "deppy_sig",
+    src = ":deppy.mli",
+    deps = ["//virt:#Virt"],
 )
 
 ocaml_module(
-    name = "dep",
-    sig = ":dep_sig",
-    struct = ":dep.ml",
-    deps = [
-        "//virt:#Virt",
-        "//virt:virt_sig",
-    ],
+    name = "deppy",
+    sig = ":deppy_sig",
+    struct = ":deppy.ml",
+    deps = ["//virt:#Virt"],
 )
 
 # okapi:auto
 # okapi:public_name dep
 ocaml_ns_library(
     name = "#Dep",
-    submodules = [":dep"],
+    submodules = [":deppy"],
     visibility = ["//visibility:public"],
 )
 `
@@ -193,7 +185,7 @@ func checkFile(t *testing.T, ws string, target string, path... string) {
   if err1 != nil { t.Fatal(err1) }
   content := strings.TrimSpace(string(bytes))
   if content != trimmedTarget {
-    t.Fatal(rel + " doesn't match:\n" + content + "\n\n------------------- target:\n" + trimmedTarget)
+    t.Fatal(rel + " doesn't match:\n\n" + content + "\n\n------------------- target:\n\n" + trimmedTarget)
   }
 }
 

@@ -59,19 +59,16 @@ func libraryDeps(
       } else if _, isOpam := resolved.(ResolvedOpam); isOpam {
         opams = append(opams, dep)
       }
-      for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s", dep)) {
-        locals = append(locals, sig.Label.String())
-      }
-    }
-    if virt, exists := ruleConfig(r, "implements"); exists && r.AttrString("sig") == "" {
-      for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s:%s_sig", virt, r.Name())) {
-        r.SetAttr("sig", sig.Label.String())
-      }
     }
     extendAttr(r, "deps", locals)
     extendAttr(r, "deps_opam", opams)
   } else {
     log.Fatalf("Invalid type for imports of source file %s: %#v", r.Name(), imports)
+  }
+  if virt, exists := ruleConfig(r, "implements"); exists && r.AttrString("sig") == "" {
+    for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s:%s", virt, r.Name())) {
+      r.SetAttr("sig", sig.Label.String())
+    }
   }
 }
 

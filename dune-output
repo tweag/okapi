@@ -1,0 +1,63 @@
+ocamlc -I dep/.dep.objs/byte -o dep/.dep.objs/byte/dep.cmo -c -impl dep/dep.ml-gen
+ocamlc -I virt/.virt.objs/byte -o virt/.virt.objs/byte/virt.cmo -c -impl virt/virt.ml-gen
+ocamlc -I impl/.impl.objs/byte -o impl/.impl.objs/byte/virt__impl__.cmo -c -impl impl/virt__impl__.ml-gen
+
+
+
+ocamlopt -I dep/.dep.objs/byte -I dep/.dep.objs/native -intf-suffix .ml-gen -o dep/.dep.objs/native/dep.cmx -c -impl dep/dep.ml-gen
+ocamlopt -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml-gen -o virt/.virt.objs/native/virt.cmx -c -impl virt/virt.ml-gen
+ocamlopt -I impl/.impl.objs/byte -I impl/.impl.objs/native -intf-suffix .ml-gen -o impl/.impl.objs/native/virt__impl__.cmx -c -impl impl/virt__impl__.ml-gen
+
+
+
+ocamlopt -I impl/.impl.objs/byte -I impl/.impl.objs/native -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml -open Virt__impl__ -o impl/.impl.objs/native/virt__Virty.cmx -c -impl impl/virty.ml
+ocamlopt -I dep/.dep.objs/byte -I dep/.dep.objs/native -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml -open Dep -o dep/.dep.objs/native/dep__Deppy.cmx -c -impl dep/deppy.ml
+ocamlopt -a -o impl/impl.cmxa impl/.impl.objs/native/virt__impl__.cmx impl/.impl.objs/native/virt__Virty.cmx impl/.impl.objs/native/virt.cmx
+ocamlopt -a -o dep/dep.cmxa dep/.dep.objs/native/dep.cmx dep/.dep.objs/native/dep__Deppy.cmx
+ocamlopt -shared -linkall -I impl -o impl/impl.cmxs impl/impl.cmxa
+ocamlopt -shared -linkall -I dep -o dep/dep.cmxs dep/dep.cmxa
+ocamlopt -I exe/.main.eobjs/byte -I exe/.main.eobjs/native -I dep/.dep.objs/byte -I dep/.dep.objs/native -I impl/.impl.objs/byte -I impl/.impl.objs/native -intf-suffix .ml -o exe/.main.eobjs/native/dune__exe__Main.cmx -c -impl exe/main.ml
+ocamlopt -o exe/main.exe impl/impl.cmxa dep/dep.cmxa exe/.main.eobjs/native/dune__exe__Main.cmx
+
+
+
+ocamlc -I virt/.virt.objs/byte -open Virt -o virt/.virt.objs/byte/virt__Virty.cmi -c -intf virt/virty.mli
+ocamlc -I dep/.dep.objs/byte -I virt/.virt.objs/byte -open Dep -o dep/.dep.objs/byte/dep__Deppy.cmi -c -intf dep/deppy.mli
+ocamlc -I impl/.impl.objs/byte -I virt/.virt.objs/byte -intf-suffix .ml -open Virt__impl__ -o impl/.impl.objs/byte/virt__Virty.cmo -c -impl impl/virty.ml
+ocamlc -I dep/.dep.objs/byte -I virt/.virt.objs/byte -intf-suffix .ml -open Dep -o dep/.dep.objs/byte/dep__Deppy.cmo -c -impl dep/deppy.ml
+ocamlc -a -o impl/impl.cma impl/.impl.objs/byte/virt__impl__.cmo impl/.impl.objs/byte/virt__Virty.cmo impl/.impl.objs/byte/virt.cmo
+ocamlc -a -o dep/dep.cma dep/.dep.objs/byte/dep.cmo dep/.dep.objs/byte/dep__Deppy.cmo
+ocamlc -I exe/.main.eobjs/byte -I dep/.dep.objs/byte -I impl/.impl.objs/byte -o exe/.main.eobjs/byte/dune__exe__Main.cmo -c -impl exe/main.ml
+
+
+
+
+
+
+
+
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -bin-annot -I dep/.dep.objs/byte -no-alias-deps -opaque -o dep/.dep.objs/byte/dep.cmo -c -impl dep/dep.ml-gen
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -bin-annot -I virt/.virt.objs/byte -no-alias-deps -opaque -o virt/.virt.objs/byte/virt.cmo -c -impl virt/virt.ml-gen
+ocamldep -modules -intf virt/virty.mli > _build/default/virt/.virt.objs/virty.mli.d
+ocamldep -modules -intf dep/deppy.mli > _build/default/dep/.dep.objs/deppy.mli.d
+ocamldep -modules -impl dep/deppy.ml > _build/default/dep/.dep.objs/deppy.ml.d
+ocamldep -modules -impl impl/virty.ml > _build/default/impl/.impl.objs/virty.ml.d
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -bin-annot -I impl/.impl.objs/byte -no-alias-deps -opaque -o impl/.impl.objs/byte/virt__impl__.cmo -c -impl impl/virt__impl__.ml-gen
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -I dep/.dep.objs/byte -I dep/.dep.objs/native -intf-suffix .ml-gen -no-alias-deps -opaque -o dep/.dep.objs/native/dep.cmx -c -impl dep/dep.ml-gen
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml-gen -no-alias-deps -opaque -o virt/.virt.objs/native/virt.cmx -c -impl virt/virt.ml-gen
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I virt/.virt.objs/byte -no-alias-deps -opaque -open Virt -o virt/.virt.objs/byte/virt__Virty.cmi -c -intf virt/virty.mli
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -w -49 -nopervasives -nostdlib -g -I impl/.impl.objs/byte -I impl/.impl.objs/native -intf-suffix .ml-gen -no-alias-deps -opaque -o impl/.impl.objs/native/virt__impl__.cmx -c -impl impl/virt__impl__.ml-gen
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I dep/.dep.objs/byte -I virt/.virt.objs/byte -no-alias-deps -opaque -open Dep -o dep/.dep.objs/byte/dep__Deppy.cmi -c -intf dep/deppy.mli
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I impl/.impl.objs/byte -I impl/.impl.objs/native -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml -no-alias-deps -opaque -open Virt__impl__ -o impl/.impl.objs/native/virt__Virty.cmx -c -impl impl/virty.ml
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I impl/.impl.objs/byte -I virt/.virt.objs/byte -intf-suffix .ml -no-alias-deps -opaque -open Virt__impl__ -o impl/.impl.objs/byte/virt__Virty.cmo -c -impl impl/virty.ml
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I dep/.dep.objs/byte -I dep/.dep.objs/native -I virt/.virt.objs/byte -I virt/.virt.objs/native -intf-suffix .ml -no-alias-deps -opaque -open Dep -o dep/.dep.objs/native/dep__Deppy.cmx -c -impl dep/deppy.ml
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I dep/.dep.objs/byte -I virt/.virt.objs/byte -intf-suffix .ml -no-alias-deps -opaque -open Dep -o dep/.dep.objs/byte/dep__Deppy.cmo -c -impl dep/deppy.ml
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o impl/impl.cma impl/.impl.objs/byte/virt__impl__.cmo impl/.impl.objs/byte/virt__Virty.cmo impl/.impl.objs/byte/virt.cmo
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o dep/dep.cma dep/.dep.objs/byte/dep.cmo dep/.dep.objs/byte/dep__Deppy.cmo
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o impl/impl.cmxa impl/.impl.objs/native/virt__impl__.cmx impl/.impl.objs/native/virt__Virty.cmx impl/.impl.objs/native/virt.cmx
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o dep/dep.cmxa dep/.dep.objs/native/dep.cmx dep/.dep.objs/native/dep__Deppy.cmx
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -shared -linkall -I impl -o impl/impl.cmxs impl/impl.cmxa
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -shared -linkall -I dep -o dep/dep.cmxs dep/dep.cmxa
+ocamlc -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I exe/.main.eobjs/byte -I dep/.dep.objs/byte -I impl/.impl.objs/byte -no-alias-deps -opaque -o exe/.main.eobjs/byte/dune__exe__Main.cmo -c -impl exe/main.ml
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I exe/.main.eobjs/byte -I exe/.main.eobjs/native -I dep/.dep.objs/byte -I dep/.dep.objs/native -I impl/.impl.objs/byte -I impl/.impl.objs/native -intf-suffix .ml -no-alias-deps -opaque -o exe/.main.eobjs/native/dune__exe__Main.cmx -c -impl exe/main.ml
+ocamlopt -w @1..3@5..28@30..39@43@46..47@49..57@61..62-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -o exe/main.exe impl/impl.cmxa de

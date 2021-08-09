@@ -153,7 +153,7 @@ correct source file has to be done manually, since there is no (easy) way to che
 Preprocessors are supported as well, causing the addition of a `ppx_executable`, which is then referenced by the
 library's modules, using the rules `ppx_module` and `ppx_ns_library`.
 
-Virtual modules are supported, but they use `-no-keep-locs` to work around an issue that is introduced by Bazel.
+Virtual modules are supported.
 
 ## Example
 

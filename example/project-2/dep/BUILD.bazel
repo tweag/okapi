@@ -1,28 +1,22 @@
-load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_library", "ocaml_module", "ocaml_signature")
+load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_signature(
-    name = "dep_sig",
-    src = ":dep.mli",
-    deps = [
-        "@okapi-test//virt:lib-virt",
-        "@okapi-test//virt:virt_sig",
-    ],
+    name = "deppy_sig",
+    src = ":deppy.mli",
+    deps = ["@okapi-test//virt:#Virt"],
 )
 
 ocaml_module(
-    name = "dep",
-    sig = ":dep_sig",
-    struct = ":dep.ml",
-    deps = [
-        "@okapi-test//virt:lib-virt",
-        "@okapi-test//virt:virt_sig",
-    ],
+    name = "deppy",
+    sig = ":deppy_sig",
+    struct = ":deppy.ml",
+    deps = ["@okapi-test//virt:#Virt"],
 )
 
 # okapi:auto
 # okapi:public_name dep
-ocaml_library(
-    name = "lib-dep",
-    modules = [":dep"],
+ocaml_ns_library(
+    name = "#Dep",
+    submodules = [":deppy"],
     visibility = ["//visibility:public"],
 )

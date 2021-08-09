@@ -1,1 +1,1 @@
-print_endline ("number: " ^ string_of_int (Dep.number 21))
+print_endline ("number: " ^ string_of_int (Dep.Deppy.number 21))

@@ -4,9 +4,8 @@ ocaml_module(
     name = "main",
     struct = ":main.ml",
     deps = [
-        "@okapi-test//dep:lib-dep",
-        "@okapi-test//impl:lib-impl",
-        "@okapi-test//plain:lib-plain",
+        "@okapi-test//dep:#Dep",
+        "@okapi-test//impl:#Impl",
     ],
 )
 
@@ -16,5 +15,5 @@ ocaml_executable(
     name = "exe",
     main = "main",
     visibility = ["//visibility:public"],
-    deps = ["@okapi-test//impl:lib-impl"],
+    deps = ["@okapi-test//impl:#Impl"],
 )

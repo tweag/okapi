@@ -115,6 +115,7 @@ func (ExePlain) ppx() bool { return false }
 
 type ComponentKind interface {
   componentRule(component Component) *rule.Rule
+  extraDeps() []string
 }
 
 type Library struct {
@@ -125,32 +126,6 @@ type Library struct {
 
 type Executable struct {
   kind ExeKind
-}
-
-func moduleAttr(wrapped bool) string {
-  if wrapped { return "submodules" } else { return "modules" }
-}
-
-func nsName(name string) string {
-  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
-}
-
-func (lib Library) componentRule(component Component) *rule.Rule {
-  libName := "lib-" + component.name
-  if lib.kind.wrapped() { libName = nsName(component.name) }
-  r := rule.NewRule(lib.kind.ruleKind(), libName)
-  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(component.modules))
-  if lib.implements != "" {
-    r.AddComment("# okapi:implements " + lib.implements)
-    r.AddComment("# okapi:implementation " + component.publicName)
-  }
-  return r
-}
-
-func (exe Executable) componentRule(component Component) *rule.Rule {
-  r := rule.NewRule(exe.kind.ruleKind(), component.publicName)
-  r.SetAttr("main", component.name)
-  return r
 }
 
 type Component struct {
@@ -165,9 +140,12 @@ type Component struct {
   kind ComponentKind
 }
 
-type RuleResult struct {
-  rule *rule.Rule
-  deps []string
+func moduleAttr(wrapped bool) string {
+  if wrapped { return "submodules" } else { return "modules" }
+}
+
+func nsName(name string) string {
+  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
 }
 
 func targetNames(deps []string) []string {
@@ -175,6 +153,35 @@ func targetNames(deps []string) []string {
   for _, dep := range deps { result = append(result, ":" + dep) }
   sort.Strings(result)
   return result
+}
+
+func (lib Library) componentRule(component Component) *rule.Rule {
+  libName := "lib-" + component.name
+  if lib.kind.wrapped() { libName = nsName(component.name) }
+  r := rule.NewRule(lib.kind.ruleKind(), libName)
+  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(append(component.modules, lib.virtualModules...)))
+  if lib.implements != "" {
+    r.AddComment("# okapi:implements " + lib.implements)
+    r.AddComment("# okapi:implementation " + component.publicName)
+  }
+  return r
+}
+
+func (exe Executable) componentRule(component Component) *rule.Rule {
+  r := rule.NewRule(exe.kind.ruleKind(), component.publicName)
+  r.SetAttr("main", component.name)
+  return r
+}
+
+func (lib Library) extraDeps() []string {
+  if lib.implements == "" { return nil } else { return []string{lib.implements} }
+}
+
+func (Executable) extraDeps() []string { return nil }
+
+type RuleResult struct {
+  rule *rule.Rule
+  deps []string
 }
 
 func extendAttr(r *rule.Rule, attr string, vs []string) {
@@ -185,11 +192,11 @@ func appendAttr(r *rule.Rule, attr string, v string) {
   r.SetAttr(attr, append(r.AttrStrings(attr), v))
 }
 
-func commonAttrs(lib Component, r *rule.Rule, deps []string) RuleResult {
-  libDeps := append(lib.depsOpam, lib.ppx.depsOpam()...)
-  extendAttr(r, "opts", lib.opts)
+func commonAttrs(component Component, r *rule.Rule, deps []string) RuleResult {
+  libDeps := append(append(component.depsOpam, component.ppx.depsOpam()...), component.kind.extraDeps()...)
+  extendAttr(r, "opts", component.opts)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  addAttrs(lib.name, r, lib.ppx)
+  addAttrs(component.name, r, component.ppx)
   return RuleResult{r, libDeps}
 }
 
@@ -202,10 +209,11 @@ func signatureRule(src Source) *rule.Rule {
 }
 
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
-  r := signatureRule(src)
+  r := rule.NewRule("ocaml_signature", src.Name)
+  r.SetAttr("src", ":" + src.Name + ".mli")
+  r.SetAttr("virtual", true)
   r.AddComment(fmt.Sprintf("# okapi:virt %s", libName))
   r.SetAttr("visibility", []string{"//visibility:public"})
-  appendAttr(r, "opts", "-no-keep-locs")
   return r
 }
 
@@ -219,7 +227,6 @@ func moduleRule(component Component, src Source) *rule.Rule {
   if src.Intf {
     r.SetAttr("sig", ":" + sigTarget(src))
   } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
-    appendAttr(r, "opts", "-no-keep-locs")
     r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
   }
   return r

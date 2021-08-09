@@ -1,6 +1,11 @@
 workspace(name = "okapi-test")
 
 local_repository(
+    name = "obazl_rules_ocaml",
+    path = "../../../rules_ocaml",
+)
+
+local_repository(
     name = "okapi",
     path = "../..",
 )

@@ -3,7 +3,6 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library")
 # okapi:implements virt
 ocaml_module(
     name = "virty",
-    sig = "@okapi-test//virt:virty",
     struct = ":virty.ml",
     implements = "@okapi-test//virt:#Virt",
 )

@@ -51,7 +51,7 @@ func libraryDeps(
   r *rule.Rule,
 ) {
   findDep := func (dep string) interface{} { return resolveDep(c, ix, dep) }
-  virt, isImpl := ruleConfig(r, "implements")
+  virt, _ := ruleConfig(r, "implements")
   var locals []string
   var opams []string
   if deps, isStrings := imports.([]string); isStrings {
@@ -71,11 +71,6 @@ func libraryDeps(
     extendAttr(r, "deps_opam", opams)
   } else {
     log.Fatalf("Invalid type for imports of source file %s: %#v", r.Name(), imports)
-  }
-  if isImpl && r.AttrString("sig") == "" {
-    for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s:%s", virt, r.Name())) {
-      r.SetAttr("sig", sig.Label.String())
-    }
   }
 }
 

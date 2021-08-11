@@ -211,9 +211,7 @@ func signatureRule(src Source) *rule.Rule {
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
   r := rule.NewRule("ocaml_signature", src.Name)
   r.SetAttr("src", ":" + src.Name + ".mli")
-  r.SetAttr("virtual", true)
   r.AddComment(fmt.Sprintf("# okapi:virt %s", libName))
-  r.SetAttr("visibility", []string{"//visibility:public"})
   return r
 }
 

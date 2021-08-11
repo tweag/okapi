@@ -4,8 +4,6 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_ns_library", "ocaml_signature
 ocaml_signature(
     name = "virty",
     src = ":virty.mli",
-    virtual = True,
-    visibility = ["//visibility:public"],
 )
 
 # okapi:auto

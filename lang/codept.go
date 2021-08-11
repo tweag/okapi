@@ -40,10 +40,10 @@ func depName(file string) string {
 func consSource(name string, intfs map[string][]string, deps []string) Source {
   _, intf := intfs[name]
   return Source{
-  	Name: name,
-  	Intf: intf,
-  	Virtual: false,
-  	Deps: deps,
+    Name: name,
+    Intf: intf,
+    Virtual: false,
+    Deps: deps,
   }
 }
 

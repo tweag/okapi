@@ -5,7 +5,7 @@ ocaml_module(
     name = "virty",
     sig = "@okapi-test//virt:virty",
     struct = ":virty.ml",
-    deps = ["@okapi-test//virt:#Virt"],
+    implements = "@okapi-test//virt:#Virt",
 )
 
 # okapi:implements virt

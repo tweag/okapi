@@ -41,7 +41,9 @@ func appendLabels(r *rule.Rule, attr string, deps []label.Label) {
 }
 
 // If the `sig` attr for the module implementing a virtual module isn't set, a `.mli` will be generated and `ocamlfind`
-// will print a warning due to multiple `.cmi` files in the include path.
+// will print a warning due to multiple `.cmi` files in the include path, so this sets the `sig` attr to the virtual
+// signature. Since an implementing library may have modules that aren't implementing and have local signatures as well,
+// this is skipped if `sig` is already set.
 func libraryDeps(
   c *config.Config,
   ix *resolve.RuleIndex,
@@ -49,13 +51,18 @@ func libraryDeps(
   r *rule.Rule,
 ) {
   findDep := func (dep string) interface{} { return resolveDep(c, ix, dep) }
+  virt, isImpl := ruleConfig(r, "implements")
   var locals []string
   var opams []string
   if deps, isStrings := imports.([]string); isStrings {
     for _, dep := range deps {
       resolved := findDep(dep)
       if local, isLocal := resolved.(ResolvedLocal); isLocal {
-        locals = append(locals, local.label.String())
+        if virt == dep {
+          r.SetAttr("implements", local.label.String())
+        } else {
+          locals = append(locals, local.label.String())
+        }
       } else if _, isOpam := resolved.(ResolvedOpam); isOpam {
         opams = append(opams, dep)
       }
@@ -65,7 +72,7 @@ func libraryDeps(
   } else {
     log.Fatalf("Invalid type for imports of source file %s: %#v", r.Name(), imports)
   }
-  if virt, exists := ruleConfig(r, "implements"); exists && r.AttrString("sig") == "" {
+  if isImpl && r.AttrString("sig") == "" {
     for _, sig := range findImport(c, ix, fmt.Sprintf("virt:%s:%s", virt, r.Name())) {
       r.SetAttr("sig", sig.Label.String())
     }

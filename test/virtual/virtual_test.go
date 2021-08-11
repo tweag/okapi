@@ -76,6 +76,7 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_ns_library", "ocaml_signature
 ocaml_signature(
     name = "virty",
     src = ":virty.mli",
+    virtual = True,
     visibility = ["//visibility:public"],
 )
 
@@ -96,7 +97,7 @@ ocaml_module(
     name = "virty",
     sig = "//virt:virty",
     struct = ":virty.ml",
-    deps = ["//virt:#Virt"],
+    implements = "//virt:#Virt",
 )
 
 # okapi:implements virt
@@ -117,7 +118,7 @@ ocaml_module(
     name = "virty",
     sig = "//virt:virty",
     struct = ":virty.ml",
-    deps = ["//virt:#Virt"],
+    implements = "//virt:#Virt",
 )
 
 # okapi:implements virt

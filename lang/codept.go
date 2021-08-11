@@ -38,12 +38,12 @@ func depName(file string) string {
 }
 
 func consSource(name string, intfs map[string][]string, deps []string) Source {
-  _, intf := intfs[name]
+  intf, hasIntf := intfs[name]
   return Source{
     Name: name,
-    Intf: intf,
+    Intf: hasIntf,
     Virtual: false,
-    Deps: deps,
+    Deps: append(deps, intf...),
   }
 }
 

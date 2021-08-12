@@ -35,10 +35,11 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
 
 func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
   conf := parseDuneFile(duneCode)
-  duneLibs := DecodeDuneConfig(name, conf)
+  duneConf := DecodeDuneConfig(name, conf)
   var components []Component
-  for _, dune := range duneLibs {
-    components = append(components, duneToOBazl(dune))
+  generated := assignDuneGenerated(duneConf)
+  for _, dune := range duneConf.components {
+    components = append(components, duneToOBazl(dune, generated))
   }
   auto := autoModules(components, sources)
   return multilib(components, sources, auto)

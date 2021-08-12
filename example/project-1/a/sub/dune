@@ -17,3 +17,5 @@
  (preprocess (pps ppx_inline_test))
  (libraries a virt)
  (modules foo bar))
+
+(ocamllex lexy)

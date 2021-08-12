@@ -128,6 +128,27 @@ type Executable struct {
   kind ExeKind
 }
 
+type Generated interface {
+  target() string
+  moduleDep() bool
+  rules(Component) []RuleResult
+}
+type Lex struct {
+  name string
+}
+
+func (lex Lex) target() string { return lex.name }
+
+func (lex Lex) moduleDep() bool { return true }
+
+func (lex Lex) rules(component Component) []RuleResult {
+  structName := lex.name + "_ml"
+  lexRule := rule.NewRule("ocaml_lex", structName)
+  lexRule.SetAttr("src", ":" + lex.name + ".mll")
+  modRule := moduleRule(component, Source{lex.name, false, false, nil}, ":" + structName, nil)
+  return []RuleResult{{lexRule, nil}, modRule}
+}
+
 type Component struct {
   name string
   publicName string
@@ -137,6 +158,7 @@ type Component struct {
   choices []ModuleChoice
   auto bool
   ppx PpxKind
+  generated []Generated
   kind ComponentKind
 }
 
@@ -159,7 +181,11 @@ func (lib Library) componentRule(component Component) *rule.Rule {
   libName := "lib-" + component.name
   if lib.kind.wrapped() { libName = nsName(component.name) }
   r := rule.NewRule(lib.kind.ruleKind(), libName)
-  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(append(component.modules, lib.virtualModules...)))
+  mods := append(component.modules, lib.virtualModules...)
+  for _, gen := range component.generated {
+    mods = append(mods, gen.target())
+  }
+  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(mods))
   if lib.implements != "" {
     r.AddComment("# okapi:implements " + lib.implements)
     r.AddComment("# okapi:implementation " + component.publicName)
@@ -202,10 +228,10 @@ func commonAttrs(component Component, r *rule.Rule, deps []string) RuleResult {
 
 func sigTarget(src Source) string { return src.Name + "_sig" }
 
-func signatureRule(src Source) *rule.Rule {
+func signatureRule(component Component, src Source, deps []string) RuleResult {
   r := rule.NewRule("ocaml_signature", sigTarget(src))
   r.SetAttr("src", ":" + src.Name + ".mli")
-  return r
+  return commonAttrs(component, r, deps)
 }
 
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
@@ -219,15 +245,27 @@ func moduleRuleName(component Component) string {
   if component.ppx.isPpx() { return "ppx_module" } else { return "ocaml_module" }
 }
 
-func moduleRule(component Component, src Source) *rule.Rule {
+func moduleRule(component Component, src Source, struct_ string, deps []string) RuleResult {
   r := rule.NewRule(moduleRuleName(component), src.Name)
-  r.SetAttr("struct", ":" + src.Name + ".ml")
+  r.SetAttr("struct", struct_)
   if src.Intf {
     r.SetAttr("sig", ":" + sigTarget(src))
   } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
     r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
   }
-  return r
+  return commonAttrs(component, r, deps)
+}
+
+func defaultModuleRule(component Component, src Source, deps []string) RuleResult {
+  return moduleRule(component, src, ":" + src.Name + ".ml", deps)
+}
+
+func generatedDeps(generated []Generated) []string {
+  var result []string
+  for _, gen := range generated {
+    if gen.moduleDep() { result = append(result, gen.target()) }
+  }
+  return result
 }
 
 func remove(name string, deps []string) []string {
@@ -255,9 +293,9 @@ func sourceRules(sources Deps, component Component) []RuleResult {
   for _, name := range component.modules {
     src, srcExists := sources[name]
     if !srcExists { src = Source{name, false, false, nil} }
-    cleanDeps := remove(name, src.Deps)
-    if src.Intf { rules = append(rules, commonAttrs(component, signatureRule(src), cleanDeps)) }
-    rules = append(rules, commonAttrs(component, moduleRule(component, src), cleanDeps))
+    cleanDeps := append(remove(name, src.Deps), generatedDeps(component.generated)...)
+    if src.Intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
+    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
   }
   if lib, isLib := component.kind.(Library); isLib {
     rules = append(rules, librarySourceRules(component, lib, sources)...)
@@ -276,8 +314,16 @@ func componentRule(component Component) RuleResult {
   return RuleResult{r, component.depsOpam}
 }
 
+func generators(component Component) []RuleResult {
+  var result []RuleResult
+  for _, gen := range component.generated {
+    result = append(result, gen.rules(component)...)
+  }
+  return result
+}
+
 func component(sources Deps, component Component) []RuleResult {
-  return append(sourceRules(sources, component), componentRule(component))
+  return append(generators(component), append(sourceRules(sources, component), componentRule(component))...)
 }
 
 // Update an existing build that has been manually amended by the user to contain more than one library.

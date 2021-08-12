@@ -22,6 +22,18 @@ type DuneLib struct {
 type DuneExe struct {
 }
 
+type DuneGenerated interface {
+  convert() Generated
+}
+
+type DuneLex struct {
+  name string
+}
+
+func (lex DuneLex) convert() Generated {
+  return Lex{lex.name}
+}
+
 type DuneComponent struct {
   name string
   publicName string
@@ -32,6 +44,11 @@ type DuneComponent struct {
   ppx bool
   preprocess []string
   kind DuneKind
+}
+
+type DuneConfig struct {
+  components []DuneComponent
+  generated []DuneGenerated
 }
 
 func parseDune(code string) SexpList {
@@ -164,8 +181,25 @@ func decodeDuneComponent(lib SexpLib) DuneKind {
   return nil
 }
 
-func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
+func generatedSources(conf SexpList) []DuneGenerated {
+  var result []DuneGenerated
+  for _, node := range conf.Sub {
+    if l, err := node.List(); err == nil {
+      if len(l) == 2 && (l[0] == SexpString{"ocamllex"}) {
+        if lex, err := l[1].String(); err == nil {
+          result = append(result, DuneLex{lex})
+        } else {
+          log.Fatalf("Invalid name for ocamllex: %#v", l[1])
+        }
+      }
+    }
+  }
+  return result
+}
+
+func DecodeDuneConfig(libName string, conf SexpList) DuneConfig {
   var components []DuneComponent
+  generated := generatedSources(conf)
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
     if isMap && (dune.Name == "library" || dune.Name == "executable") {
@@ -174,13 +208,14 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
       publicName := data.stringOr("public_name", name)
       modules := data.list("modules")
       preproc := dunePreprocessors(data)
+      auto := len(modules) == 0
       lib := DuneComponent{
         name: name,
         publicName: publicName,
         modules: data.list("modules"),
         flags: data.list("flags"),
         libraries: duneLibraryDeps(data),
-        auto: len(modules) == 0,
+        auto: auto,
         ppx: len(preproc) > 0,
         preprocess: preproc,
         kind: decodeDuneComponent(data),
@@ -188,7 +223,7 @@ func DecodeDuneConfig(libName string, conf SexpList) []DuneComponent {
       components = append(components, lib)
     }
   }
-  return components
+  return DuneConfig{components, generated}
 }
 
 func contains(target string, items []string) bool {
@@ -260,7 +295,39 @@ func duneKindToOBazl(dune DuneComponent, ppx PpxKind) ComponentKind {
   }
 }
 
-func duneToOBazl(dune DuneComponent) Component {
+func assignDuneGenerated(conf DuneConfig) map[string][]Generated {
+  byGen := make(map[Generated]string)
+  result := make(map[string][]Generated)
+  var gens []Generated
+  for _, gen := range conf.generated { gens = append(gens, gen.convert()) }
+  for _, gen := range gens {
+    if gen.moduleDep() {
+      for _, com := range conf.components {
+        _, exists := byGen[gen]
+        if com.auto {
+          if !exists { byGen[gen] = com.name }
+        } else {
+          if contains(gen.target(), com.modules) { byGen[gen] = com.name }
+        }
+      }
+    }
+  }
+  for gen, lib := range byGen {
+    val := []Generated{gen}
+    if cur, exists := result[lib]; exists {
+      val = append(val, cur...)
+    }
+    result[lib] = val
+  }
+  for _, gen := range gens {
+    if _, exists := byGen[gen]; !exists {
+      log.Fatalf("Could not assign generator: %#v", gen)
+    }
+  }
+  return result
+}
+
+func duneToOBazl(dune DuneComponent, generated map[string][]Generated) Component {
   ppx := dunePpx(dune.preprocess)
   return Component{
     name: dune.name,
@@ -271,6 +338,7 @@ func duneToOBazl(dune DuneComponent) Component {
     choices: duneChoices(dune.libraries),
     auto: dune.auto,
     ppx: ppx,
+    generated: generated[dune.name],
     kind: duneKindToOBazl(dune, ppx),
   }
 }

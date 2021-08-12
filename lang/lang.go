@@ -61,6 +61,7 @@ var kinds = map[string]rule.KindInfo {
   "filegroup": defaultKind,
   "ocaml_executable": defaultKind,
   "ppx_executable": defaultKind,
+  "ocaml_lex": defaultKind,
 }
 
 func (*okapiLang) Kinds() map[string]rule.KindInfo { return kinds }
@@ -79,6 +80,7 @@ func (*okapiLang) Loads() []rule.LoadInfo {
         "ocaml_signature",
         "ocaml_executable",
         "ppx_executable",
+        "ocaml_lex",
       },
       After: nil,
     },

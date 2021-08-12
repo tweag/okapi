@@ -25,7 +25,7 @@ const duneFile = `(library
  (modules foo bar))
 `
 
-func TestDune(t *testing.T) {
+func TestDuneParse(t *testing.T) {
   sexp := parseDune(duneFile)
   output := DecodeDuneConfig("test", sexp)
   target1 := DuneComponent{
@@ -67,7 +67,26 @@ func TestDune(t *testing.T) {
     },
   }
   targets := []DuneComponent{target1, target2}
-  if !reflect.DeepEqual(output, targets) {
+  conf := DuneConfig{targets, nil}
+  if !reflect.DeepEqual(output, conf) {
     t.Fatalf("Dune library differs.\nOutput:\n%#v\nTarget:\n%#v", output, targets)
+  }
+}
+
+func TestDuneAssignGenerated(t *testing.T) {
+  comp1 := DuneComponent{name: "comp1", auto: false, modules: []string{"lex1", "mod1"}}
+  comp2 := DuneComponent{name: "comp2", auto: true}
+  comp3 := DuneComponent{name: "comp3", auto: false, modules: []string{"lex2", "mod2"}}
+  comps := []DuneComponent{comp1, comp2, comp3}
+  generated := []DuneGenerated{DuneLex{"lex1"}, DuneLex{"lex2"}, DuneLex{"lex3"}}
+  conf := DuneConfig{comps, generated}
+  result := assignDuneGenerated(conf)
+  target := map[string][]Generated {
+    "comp1": {Lex{"lex1"}},
+    "comp2": {Lex{"lex3"}},
+    "comp3": {Lex{"lex2"}},
+  }
+  if !reflect.DeepEqual(result, target) {
+    t.Fatalf("Generators weren't assigned correctly:\n\n%#v\n\n%#v", result, target)
   }
 }

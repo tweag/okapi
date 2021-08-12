@@ -3,13 +3,11 @@ load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", 
 ocaml_signature(
     name = "a2_sig",
     src = ":a2.mli",
-    opts = [],
     deps = [":f1"],
 )
 
 ocaml_module(
     name = "a2",
-    opts = [],
     sig = ":a2_sig",
     struct = ":a2.ml",
     deps = [":f1"],
@@ -17,7 +15,6 @@ ocaml_module(
 
 ocaml_module(
     name = "a3",
-    opts = [],
     struct = ":a3.ml",
     deps = [
         ":a2",
@@ -28,12 +25,10 @@ ocaml_module(
 ocaml_signature(
     name = "f1_sig",
     src = ":f1.mli",
-    opts = [],
 )
 
 ocaml_module(
     name = "f1",
-    opts = [],
     sig = ":f1_sig",
     struct = ":f1.ml",
 )

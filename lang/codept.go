@@ -96,10 +96,13 @@ func runCodept(dir string, files []string) []byte {
       paths = append(paths, dir + "/" + file)
     }
   }
-  args := []string{"-native", "-deps", "Okapi[" + strings.Join(paths, ",") + "]"}
+  args := []string{"-native", "-deps", "-k", "Okapi[" + strings.Join(paths, ",") + "]"}
   cmd := exec.Command("codept", args...)
   out, err := cmd.Output()
-  if err != nil { log.Fatal("codept failed for " + dir + ": " + string(out[:])) }
+  if err != nil {
+    cmdline := "codept " + strings.Join(args, " ")
+    log.Fatalf("codept failed for %s with %#v: %s\ncmdline: %s", dir, err.Error(), string(out[:]), cmdline)
+  }
   return out
 }
 

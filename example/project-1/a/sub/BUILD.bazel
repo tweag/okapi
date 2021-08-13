@@ -13,40 +13,10 @@ ocaml_module(
         "ipaddr",
     ],
     opts = [
-        "-open",
-        "Angstrom",
+        "-w",
+        "-39",
     ],
     struct = ":lexy_ml",
-)
-
-ocaml_module(
-    name = "final",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    struct = ":final.ml",
-    deps = [":lexy"],
-)
-
-ocaml_module(
-    name = "sub",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    struct = ":sub.ml",
-    deps = [":lexy"],
 )
 
 ocaml_signature(
@@ -61,7 +31,6 @@ ocaml_signature(
         "-open",
         "Angstrom",
     ],
-    deps = [":lexy"],
 )
 
 ocaml_module(
@@ -77,7 +46,20 @@ ocaml_module(
     ],
     sig = ":new_sig",
     struct = ":new.ml",
-    deps = [":lexy"],
+)
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
 )
 
 # okapi:auto
@@ -85,10 +67,9 @@ ocaml_module(
 ocaml_ns_library(
     name = "#Sub_lib",
     submodules = [
-        ":final",
-        ":lexy",
-        ":new",
-        ":sub",
+        "final",
+        "new",
+        "sub",
     ],
     visibility = ["//visibility:public"],
 )
@@ -149,8 +130,8 @@ ppx_module(
 ppx_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
-        ":bar",
-        ":foo",
+        "foo",
+        "bar",
     ],
     visibility = ["//visibility:public"],
 )

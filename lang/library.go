@@ -2,6 +2,7 @@ package okapi
 
 import (
   "fmt"
+  "log"
   "sort"
   "strings"
 
@@ -14,45 +15,14 @@ type KeyValue struct {
 }
 
 type ModuleAlt struct {
-  Cond string
-  Choice string
+  cond string
+  choice string
 }
 
 type ModuleChoice struct {
-  Out string
-  Alts []ModuleAlt
+  out string
+  alts []ModuleAlt
 }
-
-func ppxExecutable(name string, deps []string) *rule.Rule {
-  r := rule.NewRule("ppx_executable", ppxName(name))
-  r.SetAttr("deps_opam", deps)
-  r.SetAttr("main", "@obazl_rules_ocaml//dsl:ppx_driver")
-  return r
-}
-
-type PpxKind interface {
-  exe(name string) []RuleResult
-  depsOpam() []string
-  isPpx() bool
-}
-
-type PpxTransitive struct {}
-type PpxDirect struct { deps []string }
-type NoPpx struct {}
-
-func (PpxTransitive) exe(string) []RuleResult { return nil }
-func (ppx PpxDirect) exe(slug string) []RuleResult {
-  return []RuleResult{{ppxExecutable(slug, ppx.deps), nil}}
-}
-func (NoPpx) exe(string) []RuleResult { return nil }
-
-func (PpxTransitive) depsOpam() []string { return nil }
-func (ppx PpxDirect) depsOpam() []string { return ppx.deps }
-func (NoPpx) depsOpam() []string { return nil }
-
-func (PpxTransitive) isPpx() bool { return true }
-func (PpxDirect) isPpx() bool { return true }
-func (NoPpx) isPpx() bool { return false }
 
 func ppxName(libName string) string { return "ppx_" + libName }
 
@@ -119,7 +89,7 @@ type ComponentKind interface {
 }
 
 type Library struct {
-  virtualModules []string
+  virtualModules []Source
   implements string
   kind LibraryKind
 }
@@ -128,37 +98,14 @@ type Executable struct {
   kind ExeKind
 }
 
-type Generated interface {
-  target() string
-  moduleDep() bool
-  rules(Component) []RuleResult
-}
-type Lex struct {
-  name string
-}
-
-func (lex Lex) target() string { return lex.name }
-
-func (lex Lex) moduleDep() bool { return true }
-
-func (lex Lex) rules(component Component) []RuleResult {
-  structName := lex.name + "_ml"
-  lexRule := rule.NewRule("ocaml_lex", structName)
-  lexRule.SetAttr("src", ":" + lex.name + ".mll")
-  modRule := moduleRule(component, Source{lex.name, false, false, nil}, ":" + structName, nil)
-  return []RuleResult{{lexRule, nil}, modRule}
-}
-
 type Component struct {
   name string
   publicName string
-  modules []string
+  modules []Source
   opts []string
   depsOpam []string
-  choices []ModuleChoice
   auto bool
   ppx PpxKind
-  generated []Generated
   kind ComponentKind
 }
 
@@ -177,15 +124,23 @@ func targetNames(deps []string) []string {
   return result
 }
 
+func libraryModules(srcs []Source) []string {
+  var result []string
+  for _, src := range srcs {
+    if src.generator.libraryModule() {
+      result = append(result, ":" + src.Name)
+    }
+  }
+  sort.Strings(result)
+  return result
+}
+
 func (lib Library) componentRule(component Component) *rule.Rule {
   libName := "lib-" + component.name
   if lib.kind.wrapped() { libName = nsName(component.name) }
   r := rule.NewRule(lib.kind.ruleKind(), libName)
   mods := append(component.modules, lib.virtualModules...)
-  for _, gen := range component.generated {
-    mods = append(mods, gen.target())
-  }
-  r.SetAttr(moduleAttr(lib.kind.wrapped()), targetNames(mods))
+  r.SetAttr(moduleAttr(lib.kind.wrapped()), libraryModules(mods))
   if lib.implements != "" {
     r.AddComment("# okapi:implements " + lib.implements)
     r.AddComment("# okapi:implementation " + component.publicName)
@@ -260,12 +215,13 @@ func defaultModuleRule(component Component, src Source, deps []string) RuleResul
   return moduleRule(component, src, ":" + src.Name + ".ml", deps)
 }
 
-func generatedDeps(generated []Generated) []string {
-  var result []string
-  for _, gen := range generated {
-    if gen.moduleDep() { result = append(result, gen.target()) }
-  }
-  return result
+func lexRules(component Component, src Source, deps []string) []RuleResult {
+  structName := src.Name + "_ml"
+  lexRule := rule.NewRule("ocaml_lex", structName)
+  lexRule.SetAttr("src", ":" + src.Name + ".mll")
+  modRule := moduleRule(component, src, ":" + structName, deps)
+  modRule.rule.SetAttr("opts", []string{"-w", "-39"})
+  return []RuleResult{{lexRule, nil}, modRule}
 }
 
 func remove(name string, deps []string) []string {
@@ -278,11 +234,30 @@ func remove(name string, deps []string) []string {
 
 func librarySourceRules(component Component, lib Library, sources Deps) []RuleResult {
   var rules []RuleResult
-  for _, name := range lib.virtualModules {
-    src, srcExists := sources[name]
-    if !srcExists { src = Source{name, false, false, nil} }
-    cleanDeps := remove(name, src.Deps)
+  for _, src := range lib.virtualModules {
+    if src.generator == nil {
+      log.Fatalf("no generator for %#v", src)
+    }
+    cleanDeps := remove(src.Name, src.Deps)
     rules = append(rules, commonAttrs(component, virtualSignatureRule(component.publicName, src), cleanDeps))
+  }
+  return rules
+}
+
+// If the source was generated, the module rule will be handled by the generator logic.
+// This still uses a potential interface though, since that may be supplied unmanaged.
+func sourceRule(src Source, component Component) []RuleResult {
+  var rules []RuleResult
+  cleanDeps := remove(src.Name, src.Deps)
+  if src.Intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
+  if _, isNoGen := src.generator.(NoGenerator); isNoGen {
+    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
+  } else if _, isLexer := src.generator.(Lexer); isLexer {
+    rules = append(rules, lexRules(component, src, cleanDeps)...)
+  } else if _, isChoice := src.generator.(Choice); isChoice {
+    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
+  } else {
+    log.Fatalf("no generator for %#v", src)
   }
   return rules
 }
@@ -290,12 +265,8 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
 func sourceRules(sources Deps, component Component) []RuleResult {
   var rules []RuleResult
   rules = append(rules, extraRules(component.ppx, component.name)...)
-  for _, name := range component.modules {
-    src, srcExists := sources[name]
-    if !srcExists { src = Source{name, false, false, nil} }
-    cleanDeps := append(remove(name, src.Deps), generatedDeps(component.generated)...)
-    if src.Intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
-    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
+  for _, src := range component.modules {
+    rules = append(rules, sourceRule(src, component)...)
   }
   if lib, isLib := component.kind.(Library); isLib {
     rules = append(rules, librarySourceRules(component, lib, sources)...)
@@ -314,16 +285,8 @@ func componentRule(component Component) RuleResult {
   return RuleResult{r, component.depsOpam}
 }
 
-func generators(component Component) []RuleResult {
-  var result []RuleResult
-  for _, gen := range component.generated {
-    result = append(result, gen.rules(component)...)
-  }
-  return result
-}
-
 func component(sources Deps, component Component) []RuleResult {
-  return append(generators(component), append(sourceRules(sources, component), componentRule(component))...)
+  return append(sourceRules(sources, component), componentRule(component))
 }
 
 // Update an existing build that has been manually amended by the user to contain more than one library.
@@ -331,7 +294,7 @@ func component(sources Deps, component Component) []RuleResult {
 // TODO when `select` directives are used from dune, they don't create module rules for the choices.
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
-func multilib(libs []Component, sources Deps, auto []string) []RuleResult {
+func multilib(libs []Component, sources Deps, auto []Source) []RuleResult {
   var rules []RuleResult
   for _, lib := range libs {
     if lib.auto { lib.modules = append(lib.modules, auto...) }
@@ -343,29 +306,31 @@ func multilib(libs []Component, sources Deps, auto []string) []RuleResult {
 func libChoices(libs []Component) map[string]bool {
   result := make(map[string]bool)
   for _, lib := range libs {
-    for _, c := range lib.choices {
-      for _, a := range c.Alts {
-        result[depName(a.Choice)] = true
+    for _, mod := range lib.modules {
+      if c, isChoice := mod.generator.(Choice); isChoice {
+        for _, a := range c.alts {
+          result[depName(a.choice)] = true
+        }
       }
     }
   }
   return result
 }
 
-func autoModules(components []Component, sources Deps) []string {
+func autoModules(components []Component, sources Deps) []Source {
   knownModules := make(map[string]bool)
   choices := libChoices(components)
-  var auto []string
+  var auto []Source
   for _, component := range components {
-    for _, mod := range component.modules { knownModules[mod] = true }
+    for _, mod := range component.modules { knownModules[mod.Name] = true }
     if lib, isLib := component.kind.(Library); isLib {
-      for _, mod := range lib.virtualModules { knownModules[mod] = true }
+      for _, mod := range lib.virtualModules { knownModules[mod.Name] = true }
     }
   }
-  for name := range sources {
+  for name, src := range sources {
     if _, exists := knownModules[name]; !exists {
       if _, isChoice := choices[name]; !isChoice {
-        auto = append(auto, name)
+        auto = append(auto, src)
       }
     }
   }

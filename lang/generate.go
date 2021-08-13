@@ -15,13 +15,15 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
   sort.Strings(keys)
+  var modules []Source
+  for _, key := range keys { modules = append(modules, sources[key]) }
+  sortSources(modules)
   lib := Component{
     name: name,
     publicName: name,
-    modules: keys,
+    modules: modules,
     opts: nil,
     depsOpam: nil,
-    choices: nil,
     auto: true,
     ppx: NoPpx{},
     kind: Library{
@@ -39,7 +41,7 @@ func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult 
   var components []Component
   generated := assignDuneGenerated(duneConf)
   for _, dune := range duneConf.components {
-    components = append(components, duneToOBazl(dune, generated))
+    components = append(components, duneToOBazl(dune, generated, sources))
   }
   auto := autoModules(components, sources)
   return multilib(components, sources, auto)
@@ -170,10 +172,10 @@ func removeColon(name string) string {
 // TODO `deps` is wrong, this needs to use `submodules` or `modules` (`kind.moduleAttr`)
 func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
   if kind, isLib := libKinds[r.Name()]; isLib {
-    var modules []string
+    var modules []Source
     for _, name := range r.AttrStrings("deps") {
       clean := removeColon(name)
-      if _, exists := sources[clean]; exists { modules = append(modules, clean) }
+      if src, exists := sources[clean]; exists { modules = append(modules, src) }
     }
     nameSlug := slug(r.Name())
     publicName := ruleConfigOr(r, "public_name", nameSlug)
@@ -184,7 +186,6 @@ func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
       modules: modules,
       opts: nil,
       depsOpam: nil,
-      choices: nil,
       auto: hasTag("auto", r),
       kind: Library{
         virtualModules: nil,
@@ -197,7 +198,7 @@ func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
   return Component{}, false
 }
 
-func existingLibraries(rules []*rule.Rule, sources Deps) ([]Component, []string) {
+func existingLibraries(rules []*rule.Rule, sources Deps) ([]Component, []Source) {
   var libs []Component
   for _, r := range rules {
     if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }

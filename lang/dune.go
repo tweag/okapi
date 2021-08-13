@@ -11,7 +11,9 @@ type DuneLibDep interface {}
 type DuneLibOpam struct { name string }
 type DuneLibSelect struct { Choice ModuleChoice }
 
-type DuneKind interface {}
+type DuneKind interface {
+  toObazl(DuneComponent, PpxKind, Deps) ComponentKind
+}
 
 type DuneLib struct {
   wrapped bool
@@ -19,19 +21,26 @@ type DuneLib struct {
   implements string
 }
 
-type DuneExe struct {
+type DuneExe struct { }
+
+func (lib DuneLib) toObazl(component DuneComponent, ppx PpxKind, sources Deps) ComponentKind {
+  var modules []Source
+  for _, mod := range lib.virtualModules {
+    modules = append(modules, sources[mod])
+  }
+  return Library{
+    virtualModules: modules,
+    implements: lib.implements,
+    kind: libKind(ppx.isPpx(), lib.wrapped),
+  }
 }
 
-type DuneGenerated interface {
-  convert() Generated
-}
-
-type DuneLex struct {
-  name string
-}
-
-func (lex DuneLex) convert() Generated {
-  return Lex{lex.name}
+func (DuneExe) toObazl(component DuneComponent, ppx PpxKind, sources Deps) ComponentKind {
+  var kind ExeKind = ExePlain{}
+  if ppx.isPpx() { kind = ExePpx{} }
+  return Executable{
+    kind: kind,
+  }
 }
 
 type DuneComponent struct {
@@ -48,7 +57,7 @@ type DuneComponent struct {
 
 type DuneConfig struct {
   components []DuneComponent
-  generated []DuneGenerated
+  generated []string
 }
 
 func parseDune(code string) SexpList {
@@ -181,13 +190,13 @@ func decodeDuneComponent(lib SexpLib) DuneKind {
   return nil
 }
 
-func generatedSources(conf SexpList) []DuneGenerated {
-  var result []DuneGenerated
+func generatedSources(conf SexpList) []string {
+  var result []string
   for _, node := range conf.Sub {
     if l, err := node.List(); err == nil {
       if len(l) == 2 && (l[0] == SexpString{"ocamllex"}) {
         if lex, err := l[1].String(); err == nil {
-          result = append(result, DuneLex{lex})
+          result = append(result, lex)
         } else {
           log.Fatalf("Invalid name for ocamllex: %#v", l[1])
         }
@@ -238,18 +247,21 @@ func modulesWithSelectOutputs(modules []string, libs []DuneLibDep) []string {
   var alts []string
   for _, lib := range libs {
     if sel, isSel := lib.(DuneLibSelect); isSel {
-      result = append(result, depName(sel.Choice.Out))
-      for _, alt := range sel.Choice.Alts { alts = append(alts, depName(alt.Choice)) }
+      result = append(result, depName(sel.Choice.out))
+      for _, alt := range sel.Choice.alts { alts = append(alts, depName(alt.choice)) }
     }
   }
   for _, lib := range modules { if !contains(lib, alts) { result = append(result, lib) } }
   return result
 }
 
-func duneChoices(libs []DuneLibDep) []ModuleChoice {
-  var choices []ModuleChoice
+func duneChoices(libs []DuneLibDep) []Source {
+  var choices []Source
   for _, dep := range libs {
-    if sel, isSel := dep.(DuneLibSelect); isSel { choices = append(choices, sel.Choice) }
+    if sel, isSel := dep.(DuneLibSelect); isSel {
+      src := Source{depName(sel.Choice.out), false, false, nil, Choice{sel.Choice.alts}}
+      choices = append(choices, src)
+    }
   }
   return choices
 }
@@ -279,41 +291,23 @@ func libKind(ppx bool, wrapped bool) LibraryKind {
   }
 }
 
-func duneKindToOBazl(dune DuneComponent, ppx PpxKind) ComponentKind {
-  if lib, isLib := dune.kind.(DuneLib); isLib {
-    return Library{
-      virtualModules: lib.virtualModules,
-      implements: lib.implements,
-      kind: libKind(ppx.isPpx(), lib.wrapped),
-    }
-  } else {
-    var kind ExeKind = ExePlain{}
-    if ppx.isPpx() { kind = ExePpx{} }
-    return Executable{
-      kind: kind,
-    }
-  }
-}
-
-func assignDuneGenerated(conf DuneConfig) map[string][]Generated {
-  byGen := make(map[Generated]string)
-  result := make(map[string][]Generated)
-  var gens []Generated
-  for _, gen := range conf.generated { gens = append(gens, gen.convert()) }
+func assignDuneGenerated(conf DuneConfig) map[string][]string {
+  byGen := make(map[string]string)
+  result := make(map[string][]string)
+  var gens []string
+  for _, gen := range conf.generated { gens = append(gens, gen) }
   for _, gen := range gens {
-    if gen.moduleDep() {
-      for _, com := range conf.components {
-        _, exists := byGen[gen]
-        if com.auto {
-          if !exists { byGen[gen] = com.name }
-        } else {
-          if contains(gen.target(), com.modules) { byGen[gen] = com.name }
-        }
+    for _, com := range conf.components {
+      _, exists := byGen[gen]
+      if com.auto {
+        if !exists { byGen[gen] = com.name }
+      } else {
+        if contains(gen, com.modules) { byGen[gen] = com.name }
       }
     }
   }
   for gen, lib := range byGen {
-    val := []Generated{gen}
+    val := []string{gen}
     if cur, exists := result[lib]; exists {
       val = append(val, cur...)
     }
@@ -327,19 +321,40 @@ func assignDuneGenerated(conf DuneConfig) map[string][]Generated {
   return result
 }
 
-func duneToOBazl(dune DuneComponent, generated map[string][]Generated) Component {
+func isChoice(name string, choices []Source) bool {
+  for _, c := range choices {
+    if c.Name == name { return true }
+  }
+  return false
+}
+
+func moduleSources(names []string, sources Deps, choices []Source) []Source {
+  var result []Source
+  for _, name := range names {
+    if src, exists := sources[name]; exists {
+      result = append(result, src)
+    } else if !isChoice(name, choices) {
+      log.Fatalf("Library refers to unknown source `%s`.", name)
+    }
+  }
+  final := append(result, choices...)
+  sortSources(final)
+  return final
+}
+
+func duneToOBazl(dune DuneComponent, generated map[string][]string, sources Deps) Component {
   ppx := dunePpx(dune.preprocess)
+  choices := duneChoices(dune.libraries)
+  moduleNames := modulesWithSelectOutputs(dune.modules, dune.libraries)
   return Component{
     name: dune.name,
     publicName: dune.publicName,
-    modules: modulesWithSelectOutputs(dune.modules, dune.libraries),
+    modules: moduleSources(append(moduleNames, generated[dune.name]...), sources, choices),
     opts: dune.flags,
     depsOpam: opamDeps(dune.libraries),
-    choices: duneChoices(dune.libraries),
     auto: dune.auto,
     ppx: ppx,
-    generated: generated[dune.name],
-    kind: duneKindToOBazl(dune, ppx),
+    kind: dune.kind.toObazl(dune, ppx, sources),
   }
 }
 

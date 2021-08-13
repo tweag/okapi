@@ -38,9 +38,9 @@ ocaml_module(
 ocaml_ns_library(
     name = "#A",
     submodules = [
-        ":a2",
-        ":a3",
-        ":f1",
+        "a2",
+        "a3",
+        "f1",
     ],
     visibility = ["//visibility:public"],
 )

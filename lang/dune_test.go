@@ -78,13 +78,13 @@ func TestDuneAssignGenerated(t *testing.T) {
   comp2 := DuneComponent{name: "comp2", auto: true}
   comp3 := DuneComponent{name: "comp3", auto: false, modules: []string{"lex2", "mod2"}}
   comps := []DuneComponent{comp1, comp2, comp3}
-  generated := []DuneGenerated{DuneLex{"lex1"}, DuneLex{"lex2"}, DuneLex{"lex3"}}
+  generated := []string{"lex1", "lex2", "lex3"}
   conf := DuneConfig{comps, generated}
   result := assignDuneGenerated(conf)
-  target := map[string][]Generated {
-    "comp1": {Lex{"lex1"}},
-    "comp2": {Lex{"lex3"}},
-    "comp3": {Lex{"lex2"}},
+  target := map[string][]string {
+    "comp1": {"lex1"},
+    "comp2": {"lex3"},
+    "comp3": {"lex2"},
   }
   if !reflect.DeepEqual(result, target) {
     t.Fatalf("Generators weren't assigned correctly:\n\n%#v\n\n%#v", result, target)

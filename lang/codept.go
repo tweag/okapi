@@ -3,8 +3,10 @@ package okapi
 import (
   "encoding/json"
   "log"
+  "os"
   "os/exec"
   "path/filepath"
+  "sort"
   "strings"
 )
 
@@ -24,11 +26,42 @@ type Codept struct {
   Local []CodeptLocal
 }
 
+type Generator interface {
+  remove() bool
+  libraryModule() bool
+}
+type NoGenerator struct {}
+type Lexer struct {}
+type Choice struct {
+  alts []ModuleAlt
+}
+
+func (NoGenerator) remove() bool { return false }
+func (Lexer) remove() bool { return true }
+func (Choice) remove() bool { return false }
+
+func (NoGenerator) libraryModule() bool { return true }
+func (Lexer) libraryModule() bool { return false }
+func (Choice) libraryModule() bool { return true }
+
+type CodeptSource struct {
+  name string
+  ext string
+  path string
+  codeptPath string
+  generator Generator
+}
+
 type Source struct {
   Name string
   Intf bool
   Virtual bool
   Deps []string
+  generator Generator
+}
+
+func sortSources(srcs []Source) {
+  sort.Slice(srcs, func(i, j int) bool { return srcs[i].Name < srcs[j].Name })
 }
 
 type Deps = map[string]Source
@@ -37,17 +70,62 @@ func depName(file string) string {
   return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 }
 
-func consSource(name string, intfs map[string][]string, deps []string) Source {
+// TODO remove intf from deps?
+func consSource(name string, intfs map[string][]string, deps []string, codept CodeptSource) Source {
   intf, hasIntf := intfs[name]
   return Source{
     Name: name,
     Intf: hasIntf,
     Virtual: false,
     Deps: append(deps, intf...),
+    generator: codept.generator,
   }
 }
 
 func modulePath(segments []string) string { return strings.Join(segments, ".") }
+
+func runLexer(dir string, file string) string {
+  ml := file[:len(file) - 1]
+  mlpath := filepath.Join(dir, ml)
+  path := filepath.Join(dir, file)
+  if _, err := os.Stat(mlpath); err == nil {
+    log.Fatalf("ocamllex module for %s already exists.", path)
+  }
+  cmd := exec.Command("ocamllex", path)
+  out, err := cmd.CombinedOutput()
+  if err != nil {
+    log.Fatalf("ocamllex failed for %s with %#v: %s\n", path, err.Error(), string(out))
+  }
+  return mlpath
+}
+
+func prepareSources(dir string, files []string) map[string]CodeptSource {
+  result := make(map[string]CodeptSource)
+  for _, file := range files {
+    path := filepath.Join(dir, file)
+    ext := filepath.Ext(file)
+    name := depName(file)
+    if ext == ".ml" || ext == ".mli" {
+      result[file] = CodeptSource{
+        name: name,
+        ext: ext,
+        path: path,
+        codeptPath: path,
+        generator: NoGenerator{},
+      }
+    } else if ext == ".mll" {
+      ml := runLexer(dir, file)
+      result[name + ".ml"] = CodeptSource{
+        name: name,
+        ext: ext,
+        path: path,
+        codeptPath: ml,
+        generator: Lexer{},
+      }
+    }
+  }
+  return result
+}
 
 // The `local` key in the codept output maps all used modules to their defining source files with the structure
 // { "module": ["Qualified", "Module", "Name"], "ml": "/path/to/name.ml" }.
@@ -55,7 +133,7 @@ func modulePath(segments []string) string { return strings.Join(segments, ".") }
 // { "file": "/path/to/name.ml", deps: [["Qualified", "Module", "Name"], ["List"]] }.
 // This function maps the files from `dependencies` to the files from `local`, noting whether a signature exists for
 // each module.
-func consDeps(dir string, codept Codept) Deps {
+func consDeps(dir string, codept Codept, codeptSources map[string]CodeptSource) Deps {
   local := make(map[string]string)
   intfs := make(map[string][]string)
   mods := make(map[string][]string)
@@ -76,9 +154,17 @@ func consDeps(dir string, codept Codept) Deps {
       if filepath.Ext(src.File) == ".mli" { intfs[name] = deps } else { mods[name] = deps }
     }
   }
-  for src, deps := range mods { sources[src] = consSource(src, intfs, deps) }
+  for src, deps := range mods { sources[src] = consSource(src, intfs, deps, codeptSources[src + ".ml"]) }
   for src, deps := range intfs {
-    if _, mod := mods[src]; !mod { sources[src] = Source{Name: src, Intf: false, Virtual: true, Deps: deps} }
+    if _, mod := mods[src]; !mod {
+      sources[src] = Source{
+        Name: src,
+        Intf: false,
+        Virtual: true,
+        Deps: deps,
+        generator: NoGenerator{},
+      }
+    }
   }
   return sources
 }
@@ -89,13 +175,9 @@ func consDeps(dir string, codept Codept) Deps {
 // `List`). If there is a local module of the same name, this will cause a false positive. Therefore, the input files
 // are specified as `Okapi[foo.ml,bar.ml]`, which will make local modules appear as `["Okapi", "List"]` in the output,
 // disambiguating them sufficiently.
-func runCodept(dir string, files []string) []byte {
+func runCodept(dir string, sources map[string]CodeptSource) []byte {
   var paths []string
-  for _, file := range files {
-    if filepath.Ext(file) == ".ml" || filepath.Ext(file) == ".mli" {
-      paths = append(paths, dir + "/" + file)
-    }
-  }
+  for _, src := range sources { paths = append(paths, src.codeptPath) }
   args := []string{"-native", "-deps", "-k", "Okapi[" + strings.Join(paths, ",") + "]"}
   cmd := exec.Command("codept", args...)
   out, err := cmd.Output()
@@ -103,13 +185,17 @@ func runCodept(dir string, files []string) []byte {
     cmdline := "codept " + strings.Join(args, " ")
     log.Fatalf("codept failed for %s with %#v: %s\ncmdline: %s", dir, err.Error(), string(out[:]), cmdline)
   }
+  for _, src := range sources {
+    if src.generator.remove() { os.Remove(src.codeptPath) }
+  }
   return out
 }
 
 func Dependencies(dir string, files []string) Deps {
-  out := runCodept(dir, files)
+  sources := prepareSources(dir, files)
+  out := runCodept(dir, sources)
   var codept Codept
   err := json.Unmarshal(out, &codept)
   if err != nil { log.Fatal("Parsing codept output for " + dir + ":\n" + err.Error() + "\n" + string(out[:])) }
-  return consDeps(dir, codept)
+  return consDeps(dir, codept, sources)
 }

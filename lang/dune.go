@@ -11,48 +11,13 @@ type DuneLibDep interface {}
 type DuneLibOpam struct { name string }
 type DuneLibSelect struct { Choice ModuleChoice }
 
-type DuneKind interface {
-  toObazl(DuneComponent, PpxKind, Deps) ComponentKind
-}
-
-type DuneLib struct {
-  wrapped bool
-  virtualModules []string
-  implements string
-}
-
-type DuneExe struct { }
-
-func (lib DuneLib) toObazl(component DuneComponent, ppx PpxKind, sources Deps) ComponentKind {
-  var modules []Source
-  for _, mod := range lib.virtualModules {
-    modules = append(modules, sources[mod])
-  }
-  return Library{
-    virtualModules: modules,
-    implements: lib.implements,
-    kind: libKind(ppx.isPpx(), lib.wrapped),
-  }
-}
-
-func (DuneExe) toObazl(component DuneComponent, ppx PpxKind, sources Deps) ComponentKind {
-  var kind ExeKind = ExePlain{}
-  if ppx.isPpx() { kind = ExePpx{} }
-  return Executable{
-    kind: kind,
-  }
-}
-
 type DuneComponent struct {
-  name string
-  publicName string
-  modules []string
-  flags []string
+  core ComponentCore
+  modules ModuleSpec
   libraries []DuneLibDep
-  auto bool
   ppx bool
   preprocess []string
-  kind DuneKind
+  kind KindSpec
 }
 
 type DuneConfig struct {
@@ -94,8 +59,6 @@ func (lib SexpLib) list(attr string) []string {
   if raw != nil {
     items, err := sexpStrings(raw)
     if err != nil { lib.fatalf("attr %s is not a list of strings: %s: %#v", attr, err, raw) }
-    // TODO this is an exclude directive
-    // if item[:2] == []string{":standard", "\\"}
     for _, item := range items {
       if item[:1] != ":" { result = append(result, item) }
     }
@@ -176,16 +139,26 @@ func dunePreprocessors(lib SexpLib) []string {
   return result
 }
 
-func decodeDuneComponent(lib SexpLib) DuneKind {
+func duneModules(names []string) ModuleSpec {
+  if len(names) == 0 {
+    return AutoModules{}
+  } else if names[0] == "\\" {
+    return ExcludeModules{names[1:]}
+  } else {
+    return ConcreteModules{names}
+  }
+}
+
+func decodeDuneComponent(lib SexpLib) KindSpec {
   wrapped := lib.data.Values["wrapped"] != SexpString{"false"}
   if lib.data.Name == "library" {
-    return DuneLib{
+    return LibSpec{
       wrapped: wrapped,
       virtualModules: lib.list("virtual_modules"),
       implements: lib.stringOptional("implements"),
     }
   } else if lib.data.Name == "executable" {
-    return DuneExe{}
+    return ExeSpec{}
   }
   return nil
 }
@@ -215,16 +188,17 @@ func DecodeDuneConfig(libName string, conf SexpList) DuneConfig {
       data := SexpLib{libName, dune}
       name := data.string("name")
       publicName := data.stringOr("public_name", name)
-      modules := data.list("modules")
       preproc := dunePreprocessors(data)
-      auto := len(modules) == 0
+      modules := duneModules(data.list("modules"))
       lib := DuneComponent{
-        name: name,
-        publicName: publicName,
-        modules: data.list("modules"),
-        flags: data.list("flags"),
+        core: ComponentCore{
+          name: name,
+          publicName: publicName,
+          flags: data.list("flags"),
+          auto: modules.auto(),
+        },
+        modules: modules,
         libraries: duneLibraryDeps(data),
-        auto: auto,
         ppx: len(preproc) > 0,
         preprocess: preproc,
         kind: decodeDuneComponent(data),
@@ -242,17 +216,21 @@ func contains(target string, items []string) bool {
   return false
 }
 
-func modulesWithSelectOutputs(modules []string, libs []DuneLibDep) []string {
-  var result []string
-  var alts []string
-  for _, lib := range libs {
-    if sel, isSel := lib.(DuneLibSelect); isSel {
-      result = append(result, depName(sel.Choice.out))
-      for _, alt := range sel.Choice.alts { alts = append(alts, depName(alt.choice)) }
+func modulesWithSelectOutputs(spec ModuleSpec, libs []DuneLibDep) ModuleSpec {
+  if concrete, isConcrete := spec.(ConcreteModules); isConcrete {
+    var result []string
+    var alts []string
+    for _, lib := range libs {
+      if sel, isSel := lib.(DuneLibSelect); isSel {
+        result = append(result, depName(sel.Choice.out))
+        for _, alt := range sel.Choice.alts { alts = append(alts, depName(alt.choice)) }
+      }
     }
+    for _, mod := range concrete.modules { if !contains(mod, alts) { result = append(result, mod) } }
+    return ConcreteModules{result}
+  } else {
+    return spec
   }
-  for _, lib := range modules { if !contains(lib, alts) { result = append(result, lib) } }
-  return result
 }
 
 func duneChoices(libs []DuneLibDep) []Source {
@@ -291,18 +269,18 @@ func libKind(ppx bool, wrapped bool) LibraryKind {
   }
 }
 
-func assignDuneGenerated(conf DuneConfig) map[string][]string {
+func assignGenerated(spec PackageSpec) map[string][]string {
   byGen := make(map[string]string)
   result := make(map[string][]string)
   var gens []string
-  for _, gen := range conf.generated { gens = append(gens, gen) }
+  for _, gen := range spec.generated { gens = append(gens, gen) }
   for _, gen := range gens {
-    for _, com := range conf.components {
+    for _, com := range spec.components {
       _, exists := byGen[gen]
-      if com.auto {
-        if !exists { byGen[gen] = com.name }
+      if com.core.auto {
+        if !exists { byGen[gen] = com.core.name }
       } else {
-        if contains(gen, com.modules) { byGen[gen] = com.name }
+        if com.modules.specifies(gen) { byGen[gen] = com.core.name }
       }
     }
   }
@@ -342,19 +320,28 @@ func moduleSources(names []string, sources Deps, choices []Source) []Source {
   return final
 }
 
-func duneToOBazl(dune DuneComponent, generated map[string][]string, sources Deps) Component {
+func duneComponentToSpec(dune DuneComponent) ComponentSpec {
   ppx := dunePpx(dune.preprocess)
   choices := duneChoices(dune.libraries)
   moduleNames := modulesWithSelectOutputs(dune.modules, dune.libraries)
-  return Component{
-    name: dune.name,
-    publicName: dune.publicName,
-    modules: moduleSources(append(moduleNames, generated[dune.name]...), sources, choices),
-    opts: dune.flags,
+  return ComponentSpec{
+    core: dune.core,
+  	modules: moduleNames,
     depsOpam: opamDeps(dune.libraries),
-    auto: dune.auto,
-    ppx: ppx,
-    kind: dune.kind.toObazl(dune, ppx, sources),
+  	ppx: ppx,
+    choices: choices,
+    kind: dune.kind,
+  }
+}
+
+func duneToSpec(config DuneConfig) PackageSpec {
+  var components []ComponentSpec
+  for _, comp := range config.components {
+    components = append(components, duneComponentToSpec(comp))
+  }
+  return PackageSpec{
+    components: components,
+    generated: config.generated,
   }
 }
 

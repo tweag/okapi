@@ -4,7 +4,6 @@ import (
   "log"
   "path/filepath"
   "regexp"
-  "sort"
   "strings"
 
   "github.com/bazelbuild/bazel-gazelle/language"
@@ -14,17 +13,18 @@ import (
 func GenerateRulesAuto(name string, sources Deps) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
-  sort.Strings(keys)
   var modules []Source
   for _, key := range keys { modules = append(modules, sources[key]) }
   sortSources(modules)
   lib := Component{
-    name: name,
-    publicName: name,
+    core: ComponentCore{
+      name: name,
+      publicName: name,
+      flags: nil,
+      auto: true,
+    },
     modules: modules,
-    opts: nil,
     depsOpam: nil,
-    auto: true,
     ppx: NoPpx{},
     kind: Library{
       virtualModules: nil,
@@ -38,13 +38,8 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
 func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
   conf := parseDuneFile(duneCode)
   duneConf := DecodeDuneConfig(name, conf)
-  var components []Component
-  generated := assignDuneGenerated(duneConf)
-  for _, dune := range duneConf.components {
-    components = append(components, duneToOBazl(dune, generated, sources))
-  }
-  auto := autoModules(components, sources)
-  return multilib(components, sources, auto)
+  spec := duneToSpec(duneConf)
+  return multilib(spec, sources)
 }
 
 func GenerateRules(dir string, sources Deps, dune string) []RuleResult {
@@ -170,43 +165,53 @@ func removeColon(name string) string {
 // TODO general question about attrs like opts and deps_opam: is it more sensible to leave these nil when updating,
 // since they get merged anyway?
 // TODO `deps` is wrong, this needs to use `submodules` or `modules` (`kind.moduleAttr`)
-func existingLibrary(r *rule.Rule, sources Deps) (Component, bool) {
+func existingLibrary(r *rule.Rule, sources Deps) (ComponentSpec, bool) {
   if kind, isLib := libKinds[r.Name()]; isLib {
-    var modules []Source
-    for _, name := range r.AttrStrings("deps") {
-      clean := removeColon(name)
-      if src, exists := sources[clean]; exists { modules = append(modules, src) }
+    var moduleSpec ModuleSpec = AutoModules{}
+    if len(r.AttrStrings("deps")) > 0 {
+      var modules []string
+      for _, name := range r.AttrStrings("deps") {
+        clean := removeColon(name)
+        modules = append(modules, clean)
+        // if src, exists := sources[clean]; exists { modules = append(modules, src) }
+      }
+      moduleSpec = ConcreteModules{modules}
     }
     nameSlug := slug(r.Name())
     publicName := ruleConfigOr(r, "public_name", nameSlug)
     implements := ruleConfigOr(r, "implements", "")
-    lib := Component{
-      name: nameSlug,
-      publicName: publicName,
-      modules: modules,
-      opts: nil,
+    var ppx PpxKind = NoPpx{}
+    if kind.ppx() { ppx = PpxTransitive{} }
+    lib := ComponentSpec{
+      core: ComponentCore{
+        name: nameSlug,
+        publicName: publicName,
+        flags: nil,
+        auto: hasTag("auto", r),
+      },
+      modules: moduleSpec,
       depsOpam: nil,
-      auto: hasTag("auto", r),
-      kind: Library{
+      ppx: ppx,
+      kind: LibSpec{
+        wrapped: kind.wrapped(),
         virtualModules: nil,
         implements: implements,
-        kind: kind,
       },
     }
     return lib, true
   }
-  return Component{}, false
+  return ComponentSpec{}, false
 }
 
-func existingLibraries(rules []*rule.Rule, sources Deps) ([]Component, []Source) {
-  var libs []Component
+func existingLibraries(rules []*rule.Rule, sources Deps) PackageSpec {
+  var libs []ComponentSpec
   for _, r := range rules {
     if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }
   }
-  return libs, autoModules(libs, sources)
+  return PackageSpec{libs, nil}
 }
 
 func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []RuleResult {
-  libs, auto := existingLibraries(rules, sources)
-  return multilib(libs, sources, auto)
+  spec := existingLibraries(rules, sources)
+  return multilib(spec, sources)
 }

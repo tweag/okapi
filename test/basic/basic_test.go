@@ -189,18 +189,18 @@ ppx_ns_library(
 )
 
 ocaml_module(
+    name = "bar",
+    struct = ":bar.ml",
+    deps = ["//a:#A"],
+)
+
+ocaml_module(
     name = "foo",
     struct = ":foo.ml",
     deps = [
         ":bar",
         "//a:#A",
     ],
-)
-
-ocaml_module(
-    name = "bar",
-    struct = ":bar.ml",
-    deps = ["//a:#A"],
 )
 
 # okapi:public_name sub-extra-lib

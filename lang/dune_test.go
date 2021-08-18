@@ -25,14 +25,23 @@ const duneFile = `(library
  (modules foo bar))
 `
 
+var defaultLibKind = LibSpec{
+  wrapped: true,
+  virtualModules: nil,
+  implements: "",
+}
+
 func TestDuneParse(t *testing.T) {
   sexp := parseDune(duneFile)
   output := DecodeDuneConfig("test", sexp)
   target1 := DuneComponent{
-    name: "sub_lib",
-    publicName: "sub-lib",
-    modules: nil,
-    flags: []string{"-open", "Angstrom"},
+    core: ComponentCore{
+      name: "sub_lib",
+      publicName: "sub-lib",
+      flags: []string{"-open", "Angstrom"},
+      auto: true,
+    },
+    modules: AutoModules{},
     libraries: []DuneLibDep{
       DuneLibOpam{"angstrom"},
       DuneLibOpam{"re"},
@@ -42,29 +51,22 @@ func TestDuneParse(t *testing.T) {
         {"", "choice2.ml"},
       }}},
     },
-    auto: true,
     ppx: false,
     preprocess: nil,
-    kind: DuneLib{
-      wrapped: true,
-      virtualModules: nil,
-      implements: "",
-    },
+    kind: defaultLibKind,
   }
   target2 := DuneComponent{
-    name: "sub_extra_lib",
-    publicName: "sub-extra-lib",
-    modules: []string{"foo", "bar"},
-    flags: nil,
+    core: ComponentCore{
+      name: "sub_extra_lib",
+      publicName: "sub-extra-lib",
+      flags: nil,
+      auto: false,
+    },
+    modules: ConcreteModules{[]string{"foo", "bar"}},
     libraries: nil,
-    auto: false,
     ppx: true,
     preprocess: []string{"ppx_inline_test"},
-    kind: DuneLib{
-      wrapped: true,
-      virtualModules: nil,
-      implements: "",
-    },
+    kind: defaultLibKind,
   }
   targets := []DuneComponent{target1, target2}
   conf := DuneConfig{targets, nil}
@@ -74,13 +76,23 @@ func TestDuneParse(t *testing.T) {
 }
 
 func TestDuneAssignGenerated(t *testing.T) {
-  comp1 := DuneComponent{name: "comp1", auto: false, modules: []string{"lex1", "mod1"}}
-  comp2 := DuneComponent{name: "comp2", auto: true}
-  comp3 := DuneComponent{name: "comp3", auto: false, modules: []string{"lex2", "mod2"}}
+  comp1 := DuneComponent{
+    core: ComponentCore{name: "comp1", auto: false},
+    modules: ConcreteModules{[]string{"lex1", "mod1"}},
+  }
+  comp2 := DuneComponent{
+    core: ComponentCore{name: "comp2", auto: true},
+    modules: AutoModules{},
+  }
+  comp3 := DuneComponent{
+    core: ComponentCore{name: "comp3", auto: false},
+    modules: ConcreteModules{[]string{"lex2", "mod2"}},
+  }
   comps := []DuneComponent{comp1, comp2, comp3}
   generated := []string{"lex1", "lex2", "lex3"}
   conf := DuneConfig{comps, generated}
-  result := assignDuneGenerated(conf)
+  spec := duneToSpec(conf)
+  result := assignGenerated(spec)
   target := map[string][]string {
     "comp1": {"lex1"},
     "comp2": {"lex3"},

@@ -127,7 +127,7 @@ func libraryModules(srcs []Source) []string {
   var result []string
   for _, src := range srcs {
     if src.generator.libraryModule() {
-      result = append(result, ":" + src.Name)
+      result = append(result, ":" + src.name)
     }
   }
   sort.Strings(result)
@@ -148,7 +148,7 @@ func (lib Library) componentRule(component Component) *rule.Rule {
 }
 
 func (exe Executable) componentRule(component Component) *rule.Rule {
-  r := rule.NewRule(exe.kind.ruleKind(), component.core.publicName)
+  r := rule.NewRule(exe.kind.ruleKind(), "exe-" + component.core.publicName)
   r.SetAttr("main", component.core.name)
   return r
 }
@@ -180,17 +180,17 @@ func commonAttrs(component Component, r *rule.Rule, deps []string) RuleResult {
   return RuleResult{r, libDeps}
 }
 
-func sigTarget(src Source) string { return src.Name + "_sig" }
+func sigTarget(src Source) string { return src.name + "__sig" }
 
 func signatureRule(component Component, src Source, deps []string) RuleResult {
   r := rule.NewRule("ocaml_signature", sigTarget(src))
-  r.SetAttr("src", ":" + src.Name + ".mli")
+  r.SetAttr("src", ":" + src.name + ".mli")
   return commonAttrs(component, r, deps)
 }
 
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
-  r := rule.NewRule("ocaml_signature", src.Name)
-  r.SetAttr("src", ":" + src.Name + ".mli")
+  r := rule.NewRule("ocaml_signature", src.name)
+  r.SetAttr("src", ":" + src.name + ".mli")
   r.AddComment(fmt.Sprintf("# okapi:virt %s", libName))
   return r
 }
@@ -200,9 +200,9 @@ func moduleRuleName(component Component) string {
 }
 
 func moduleRule(component Component, src Source, struct_ string, deps []string) RuleResult {
-  r := rule.NewRule(moduleRuleName(component), src.Name)
+  r := rule.NewRule(moduleRuleName(component), src.name)
   r.SetAttr("struct", struct_)
-  if src.Intf {
+  if src.intf {
     r.SetAttr("sig", ":" + sigTarget(src))
   } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
     r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
@@ -211,13 +211,13 @@ func moduleRule(component Component, src Source, struct_ string, deps []string) 
 }
 
 func defaultModuleRule(component Component, src Source, deps []string) RuleResult {
-  return moduleRule(component, src, ":" + src.Name + ".ml", deps)
+  return moduleRule(component, src, ":" + src.name + ".ml", deps)
 }
 
 func lexRules(component Component, src Source, deps []string) []RuleResult {
-  structName := src.Name + "_ml"
+  structName := src.name + "_ml"
   lexRule := rule.NewRule("ocaml_lex", structName)
-  lexRule.SetAttr("src", ":" + src.Name + ".mll")
+  lexRule.SetAttr("src", ":" + src.name + ".mll")
   modRule := moduleRule(component, src, ":" + structName, deps)
   modRule.rule.SetAttr("opts", []string{"-w", "-39"})
   return []RuleResult{{lexRule, nil}, modRule}
@@ -237,7 +237,7 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
     if src.generator == nil {
       log.Fatalf("no generator for %#v", src)
     }
-    cleanDeps := remove(src.Name, src.Deps)
+    cleanDeps := remove(src.name, src.deps)
     rules = append(rules, commonAttrs(component, virtualSignatureRule(component.core.publicName, src), cleanDeps))
   }
   return rules
@@ -247,8 +247,8 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
 // This still uses a potential interface though, since that may be supplied unmanaged.
 func sourceRule(src Source, component Component) []RuleResult {
   var rules []RuleResult
-  cleanDeps := remove(src.Name, src.Deps)
-  if src.Intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
+  cleanDeps := remove(src.name, src.deps)
+  if src.intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
   if _, isNoGen := src.generator.(NoGenerator); isNoGen {
     rules = append(rules, defaultModuleRule(component, src, cleanDeps))
   } else if _, isLexer := src.generator.(Lexer); isLexer {
@@ -314,7 +314,7 @@ func filterAuto(auto []Source, spec ModuleSpec) []Source {
     for _, src := range auto {
       found := false
       for _, ex := range exclude.modules {
-        if ex == src.Name { found = true }
+        if ex == src.name { found = true }
       }
       if !found { result = append(result, src) }
     }
@@ -328,12 +328,12 @@ func specComponent(comp ComponentSources, sources Deps, auto []Source) Component
   modules := comp.sources
   modules = append(modules, filterAuto(auto, comp.component.modules)...)
   return Component{
-  	core: comp.component.core,
-  	modules: modules,
-  	depsOpam: comp.component.depsOpam,
-  	ppx: comp.component.ppx,
+    core: comp.component.core,
+    modules: modules,
+    depsOpam: comp.component.depsOpam,
+    ppx: comp.component.ppx,
     kind: comp.component.kind.toObazl(comp.component.ppx, sources),
-  	annotations: nil,
+    annotations: nil,
   }
 }
 
@@ -379,7 +379,7 @@ func autoModules(components []ComponentSources, sources Deps) []Source {
   choices := libChoices(components)
   var auto []Source
   for _, component := range components {
-    for _, mod := range component.sources { knownModules[mod.Name] = true }
+    for _, mod := range component.sources { knownModules[mod.name] = true }
     if lib, isLib := component.component.kind.(LibSpec); isLib {
       for _, mod := range lib.virtualModules { knownModules[mod] = true }
     }

@@ -59,7 +59,7 @@ end
  (name sub_extra_lib)
  (public_name sub-extra-lib)
  (libraries a)
- (modules foo bar))
+ (modules Foo bar))
 -- a/sub/bar.ml --
 module Bar = struct
   let sub a = a

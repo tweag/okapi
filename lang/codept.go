@@ -53,15 +53,15 @@ type CodeptSource struct {
 }
 
 type Source struct {
-  Name string
-  Intf bool
-  Virtual bool
-  Deps []string
+  name string
+  intf bool
+  virtual bool
+  deps []string
   generator Generator
 }
 
 func sortSources(srcs []Source) {
-  sort.Slice(srcs, func(i, j int) bool { return srcs[i].Name < srcs[j].Name })
+  sort.Slice(srcs, func(i, j int) bool { return srcs[i].name < srcs[j].name })
 }
 
 type Deps = map[string]Source
@@ -74,10 +74,10 @@ func depName(file string) string {
 func consSource(name string, intfs map[string][]string, deps []string, codept CodeptSource) Source {
   intf, hasIntf := intfs[name]
   return Source{
-    Name: name,
-    Intf: hasIntf,
-    Virtual: false,
-    Deps: append(deps, intf...),
+    name: name,
+    intf: hasIntf,
+    virtual: false,
+    deps: append(deps, intf...),
     generator: codept.generator,
   }
 }
@@ -158,10 +158,10 @@ func consDeps(dir string, codept Codept, codeptSources map[string]CodeptSource) 
   for src, deps := range intfs {
     if _, mod := mods[src]; !mod {
       sources[src] = Source{
-        Name: src,
-        Intf: false,
-        Virtual: true,
-        Deps: deps,
+        name: src,
+        intf: false,
+        virtual: true,
+        deps: deps,
         generator: NoGenerator{},
       }
     }

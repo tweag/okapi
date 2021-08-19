@@ -1,5 +1,19 @@
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_lex", "ocaml_module", "ocaml_ns_library", "ocaml_signature", "ppx_executable", "ppx_module", "ppx_ns_library")
 
+ocaml_module(
+    name = "final",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":final.ml",
+)
+
 ocaml_lex(
     name = "lexy_ml",
     src = ":lexy.mll",
@@ -17,6 +31,20 @@ ocaml_module(
         "-39",
     ],
     struct = ":lexy_ml",
+)
+
+ocaml_module(
+    name = "sub",
+    deps_opam = [
+        "angstrom",
+        "re",
+        "ipaddr",
+    ],
+    opts = [
+        "-open",
+        "Angstrom",
+    ],
+    struct = ":sub.ml",
 )
 
 ocaml_signature(
@@ -48,28 +76,14 @@ ocaml_module(
     struct = ":new.ml",
 )
 
-ocaml_module(
-    name = "sub",
-    deps_opam = [
-        "angstrom",
-        "re",
-        "ipaddr",
-    ],
-    opts = [
-        "-open",
-        "Angstrom",
-    ],
-    struct = ":sub.ml",
-)
-
 # okapi:auto
 # okapi:public_name sub-lib
 ocaml_ns_library(
     name = "#Sub_lib",
     submodules = [
-        "final",
-        "new",
-        "sub",
+        ":final",
+        ":new",
+        ":sub",
     ],
     visibility = ["//visibility:public"],
 )
@@ -78,6 +92,19 @@ ppx_executable(
     name = "ppx_sub_extra_lib",
     deps_opam = ["ppx_inline_test"],
     main = "@obazl_rules_ocaml//dsl:ppx_driver",
+)
+
+ppx_module(
+    name = "bar",
+    deps_opam = [
+        "virt",
+        "ppx_inline_test",
+    ],
+    ppx = ":ppx_sub_extra_lib",
+    ppx_print = "@ppx//print:text",
+    ppx_tags = ["inline-test"],
+    struct = ":bar.ml",
+    deps = ["@okapi-test//a:#A"],
 )
 
 ocaml_signature(
@@ -113,25 +140,12 @@ ppx_module(
     ],
 )
 
-ppx_module(
-    name = "bar",
-    deps_opam = [
-        "virt",
-        "ppx_inline_test",
-    ],
-    ppx = ":ppx_sub_extra_lib",
-    ppx_print = "@ppx//print:text",
-    ppx_tags = ["inline-test"],
-    struct = ":bar.ml",
-    deps = ["@okapi-test//a:#A"],
-)
-
 # okapi:public_name sub-extra-lib
 ppx_ns_library(
     name = "#Sub_extra_lib",
     submodules = [
-        "foo",
-        "bar",
+        ":bar",
+        ":foo",
     ],
     visibility = ["//visibility:public"],
 )

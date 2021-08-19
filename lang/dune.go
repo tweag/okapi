@@ -5,6 +5,7 @@ import (
   "io/ioutil"
   "log"
   "path/filepath"
+  "strings"
 )
 
 type DuneLibDep interface {}
@@ -237,7 +238,14 @@ func duneChoices(libs []DuneLibDep) []Source {
   var choices []Source
   for _, dep := range libs {
     if sel, isSel := dep.(DuneLibSelect); isSel {
-      src := Source{depName(sel.Choice.out), false, false, nil, Choice{sel.Choice.alts}}
+      name := depName(sel.Choice.out)
+      src := Source{
+        name: name,
+        intf: false,
+        virtual: false,
+        deps: nil,
+        generator: Choice{sel.Choice.alts},
+      }
       choices = append(choices, src)
     }
   }
@@ -301,15 +309,21 @@ func assignGenerated(spec PackageSpec) map[string][]string {
 
 func isChoice(name string, choices []Source) bool {
   for _, c := range choices {
-    if c.Name == name { return true }
+    if c.name == name { return true }
   }
   return false
+}
+
+func untitlecase(name string) string {
+  return strings.ToLower(name[:1]) + name[1:]
 }
 
 func moduleSources(names []string, sources Deps, choices []Source) []Source {
   var result []Source
   for _, name := range names {
     if src, exists := sources[name]; exists {
+      result = append(result, src)
+    } else if src, exists := sources[untitlecase(name)]; exists {
       result = append(result, src)
     } else if !isChoice(name, choices) {
       log.Fatalf("Library refers to unknown source `%s`.", name)
@@ -326,9 +340,9 @@ func duneComponentToSpec(dune DuneComponent) ComponentSpec {
   moduleNames := modulesWithSelectOutputs(dune.modules, dune.libraries)
   return ComponentSpec{
     core: dune.core,
-  	modules: moduleNames,
+    modules: moduleNames,
     depsOpam: opamDeps(dune.libraries),
-  	ppx: ppx,
+    ppx: ppx,
     choices: choices,
     kind: dune.kind,
   }

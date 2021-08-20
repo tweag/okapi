@@ -3,6 +3,7 @@ package okapi
 import (
   "flag"
   "fmt"
+  "log"
   "path/filepath"
 
   "github.com/bazelbuild/bazel-gazelle/config"
@@ -17,29 +18,26 @@ const okapiName = "okapi"
 
 type okapiLang struct {}
 
+type Config struct {
+  library *bool
+}
+
 func NewLanguage() language.Language { return &okapiLang{} }
 
 func (*okapiLang) Name() string { return okapiName }
 
-func (*okapiLang) RegisterFlags(fs *flag.FlagSet, cmd string, c *config.Config) {}
+func (*okapiLang) RegisterFlags(fs *flag.FlagSet, cmd string, c *config.Config) {
+  library := fs.Bool("library", false, "build libraries instead of archives")
+  c.Exts[okapiName] = Config {
+    library: library,
+  }
+}
 
 func (*okapiLang) CheckFlags(fs *flag.FlagSet, c *config.Config) error { return nil }
 
 func (*okapiLang) KnownDirectives() []string { return []string{} }
 
-type Config struct {}
-
-func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {
-  if f == nil { return }
-  m, ok := c.Exts[okapiName]
-  var extraConfig Config
-  if ok {
-    extraConfig = m.(Config)
-  } else {
-    extraConfig = Config{}
-  }
-  c.Exts[okapiName] = extraConfig
-}
+func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {}
 
 var defaultKind = rule.KindInfo{
   MatchAny: false,
@@ -58,6 +56,10 @@ var kinds = map[string]rule.KindInfo {
   "ppx_library": defaultKind,
   "ocaml_ns_library": defaultKind,
   "ocaml_library": defaultKind,
+  "ppx_ns_archive": defaultKind,
+  "ppx_archive": defaultKind,
+  "ocaml_ns_archive": defaultKind,
+  "ocaml_archive": defaultKind,
   "filegroup": defaultKind,
   "ocaml_executable": defaultKind,
   "ppx_executable": defaultKind,
@@ -75,6 +77,10 @@ func (*okapiLang) Loads() []rule.LoadInfo {
         "ocaml_library",
         "ppx_ns_library",
         "ppx_library",
+        "ocaml_ns_archive",
+        "ocaml_archive",
+        "ppx_ns_archive",
+        "ppx_archive",
         "ocaml_module",
         "ppx_module",
         "ocaml_signature",
@@ -144,12 +150,13 @@ func containsOcaml(args language.GenerateArgs) bool {
   return false
 }
 
-func generateIfOcaml(args language.GenerateArgs) []RuleResult {
+func generateIfOcaml(args language.GenerateArgs, library bool) []RuleResult {
   if containsOcaml(args) {
     return GenerateRules(
       args.Dir,
       Dependencies(args.Dir, args.RegularFiles),
       findDune(args.Dir, args.RegularFiles),
+      library,
     )
   } else {
     return nil
@@ -157,11 +164,13 @@ func generateIfOcaml(args language.GenerateArgs) []RuleResult {
 }
 
 func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateResult {
+  config, valid := args.Config.Exts[okapiName].(Config)
+  if !valid { log.Fatalf("invalid config: %#v", args.Config.Exts[okapiName]) }
   var results []RuleResult
   if args.File != nil && args.File.Rules != nil && containsLibrary(args.File.Rules) {
-    results = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles))
+    results = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles), *config.library)
   } else {
-    results = generateIfOcaml(args)
+    results = generateIfOcaml(args, *config.library)
   }
   var rules []*rule.Rule
   var imports []interface{}

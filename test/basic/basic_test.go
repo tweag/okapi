@@ -88,14 +88,14 @@ okapi_setup_legacy()
 const aBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_signature(
-    name = "a2_sig",
+    name = "a2__sig",
     src = ":a2.mli",
     deps = [":f1"],
 )
 
 ocaml_module(
     name = "a2",
-    sig = ":a2_sig",
+    sig = ":a2__sig",
     struct = ":a2.ml",
     deps = [":f1"],
 )
@@ -110,13 +110,13 @@ ocaml_module(
 )
 
 ocaml_signature(
-    name = "f1_sig",
+    name = "f1__sig",
     src = ":f1.mli",
 )
 
 ocaml_module(
     name = "f1",
-    sig = ":f1_sig",
+    sig = ":f1__sig",
     struct = ":f1.ml",
 )
 
@@ -224,7 +224,7 @@ func checkFile(t *testing.T, ws string, target string, path... string) {
 }
 
 func TestBuild(t *testing.T) {
-  if err := bazel_testing.RunBazel("run", "//:gazelle"); err != nil { t.Fatal(err) }
+  if err := bazel_testing.RunBazel("run", "//:gazelle", "--", "--library"); err != nil { t.Fatal(err) }
   output, err := bazel_testing.BazelOutput("info", "workspace")
   ws := string(output[:])
   if err != nil { t.Fatal(err) }

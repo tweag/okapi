@@ -131,14 +131,14 @@ const depBuildTarget = `
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_signature(
-    name = "deppy_sig",
+    name = "deppy__sig",
     src = ":deppy.mli",
     deps = ["//virt:#Virt"],
 )
 
 ocaml_module(
     name = "deppy",
-    sig = ":deppy_sig",
+    sig = ":deppy__sig",
     struct = ":deppy.ml",
     deps = ["//virt:#Virt"],
 )
@@ -167,10 +167,13 @@ ocaml_module(
 # okapi:auto
 # okapi:public_name exe
 ocaml_executable(
-    name = "exe",
+    name = "exe-exe",
     main = "main",
     visibility = ["//visibility:public"],
-    deps = ["//impl2:#Impl2"],
+    deps = [
+        ":main",
+        "//impl2:#Impl2",
+    ],
 )
 `
 
@@ -197,7 +200,7 @@ func run(t *testing.T, cmd... string) string {
 
 func TestVirtual(t *testing.T) {
   ws := run(t, "info", "workspace")
-  run(t, "run", "//:gazelle")
+  run(t, "run", "//:gazelle", "--", "--library")
   checkFile(t, ws, virtBuildTarget, "virt", "BUILD.bazel")
   checkFile(t, ws, impl1BuildTarget, "impl1", "BUILD.bazel")
   checkFile(t, ws, impl2BuildTarget, "impl2", "BUILD.bazel")

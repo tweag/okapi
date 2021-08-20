@@ -39,12 +39,12 @@ func extraRules(kind PpxKind, slug string) []RuleResult {
   return nil
 }
 
-func nsLibraryName(name string) string {
-  return "#" + strings.Title(strings.ReplaceAll(name, "-", "_"))
+func libSuffix(library bool) string {
+  if library { return "library" } else { return "archive" }
 }
 
 type LibraryKind interface {
-  ruleKind() string
+  ruleKind(library bool) string
   ppx() bool
   wrapped() bool
 }
@@ -54,10 +54,10 @@ type LibNs struct {}
 type LibPpx struct {}
 type LibPlain struct {}
 
-func (LibNsPpx) ruleKind() string { return "ppx_ns_library" }
-func (LibNs) ruleKind() string { return "ocaml_ns_library" }
-func (LibPpx) ruleKind() string { return "ppx_library" }
-func (LibPlain) ruleKind() string { return "ocaml_library" }
+func (LibNsPpx) ruleKind(library bool) string { return "ppx_ns_" + libSuffix(library) }
+func (LibNs) ruleKind(library bool) string { return "ocaml_ns_" + libSuffix(library) }
+func (LibPpx) ruleKind(library bool) string { return "ppx_" + libSuffix(library) }
+func (LibPlain) ruleKind(library bool) string { return "ocaml_" + libSuffix(library) }
 
 func (LibNsPpx) ppx() bool { return true }
 func (LibNs) ppx() bool { return false }
@@ -70,21 +70,21 @@ func (LibPpx) wrapped() bool { return false }
 func (LibPlain) wrapped() bool { return false }
 
 type ExeKind interface {
-  ruleKind() string
+  ruleKind(library bool) string
   ppx() bool
 }
 
 type ExePpx struct {}
 type ExePlain struct {}
 
-func (ExePpx) ruleKind() string { return "ppx_executable" }
-func (ExePlain) ruleKind() string { return "ocaml_executable" }
+func (ExePpx) ruleKind(library bool) string { return "ppx_executable" }
+func (ExePlain) ruleKind(library bool) string { return "ocaml_executable" }
 
 func (ExePpx) ppx() bool { return true }
 func (ExePlain) ppx() bool { return false }
 
 type ComponentKind interface {
-  componentRule(component Component) *rule.Rule
+  componentRule(component Component, library bool) *rule.Rule
   extraDeps() []string
 }
 
@@ -134,10 +134,10 @@ func libraryModules(srcs []Source) []string {
   return result
 }
 
-func (lib Library) componentRule(component Component) *rule.Rule {
+func (lib Library) componentRule(component Component, library bool) *rule.Rule {
   libName := "lib-" + component.core.name
   if lib.kind.wrapped() { libName = nsName(component.core.name) }
-  r := rule.NewRule(lib.kind.ruleKind(), libName)
+  r := rule.NewRule(lib.kind.ruleKind(library), libName)
   mods := append(component.modules, lib.virtualModules...)
   r.SetAttr(moduleAttr(lib.kind.wrapped()), libraryModules(mods))
   if lib.implements != "" {
@@ -147,9 +147,10 @@ func (lib Library) componentRule(component Component) *rule.Rule {
   return r
 }
 
-func (exe Executable) componentRule(component Component) *rule.Rule {
-  r := rule.NewRule(exe.kind.ruleKind(), "exe-" + component.core.publicName)
+func (exe Executable) componentRule(component Component, library bool) *rule.Rule {
+  r := rule.NewRule(exe.kind.ruleKind(library), "exe-" + component.core.publicName)
   r.SetAttr("main", component.core.name)
+  r.SetAttr("deps", libraryModules(component.modules))
   return r
 }
 
@@ -276,16 +277,16 @@ func sourceRules(sources Deps, component Component) []RuleResult {
 func setLibraryModules(component Component, r *rule.Rule) {
 }
 
-func componentRule(component Component) RuleResult {
-  r := component.kind.componentRule(component)
+func componentRule(component Component, library bool) RuleResult {
+  r := component.kind.componentRule(component, library)
   if component.core.auto { r.AddComment("# okapi:auto") }
   r.AddComment("# okapi:public_name " + component.core.publicName)
   r.SetAttr("visibility", []string{"//visibility:public"})
   return RuleResult{r, component.depsOpam}
 }
 
-func component(sources Deps, component Component) []RuleResult {
-  return append(sourceRules(sources, component), componentRule(component))
+func component(sources Deps, component Component, library bool) []RuleResult {
+  return append(sourceRules(sources, component), componentRule(component, library))
 }
 
 type ComponentSources struct {
@@ -351,11 +352,11 @@ func specComponents(spec PackageSpec, sources Deps) []Component {
 // TODO when `select` directives are used from dune, they don't create module rules for the choices.
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
-func multilib(spec PackageSpec, sources Deps) []RuleResult {
+func multilib(spec PackageSpec, sources Deps, library bool) []RuleResult {
   components := specComponents(spec, sources)
   var rules []RuleResult
   for _, comp := range components {
-    rules = append(rules, component(sources, comp)...)
+    rules = append(rules, component(sources, comp, library)...)
   }
   return rules
 }

@@ -10,7 +10,7 @@ import (
   "github.com/bazelbuild/bazel-gazelle/rule"
 )
 
-func GenerateRulesAuto(name string, sources Deps) []RuleResult {
+func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
   var modules []Source
@@ -32,22 +32,22 @@ func GenerateRulesAuto(name string, sources Deps) []RuleResult {
       kind: LibNs{},
     },
   }
-  return component(sources, lib)
+  return component(sources, lib, library)
 }
 
-func GenerateRulesDune(name string, sources Deps, duneCode string) []RuleResult {
+func GenerateRulesDune(name string, sources Deps, duneCode string, library bool) []RuleResult {
   conf := parseDuneFile(duneCode)
   duneConf := DecodeDuneConfig(name, conf)
   spec := duneToSpec(duneConf)
-  return multilib(spec, sources)
+  return multilib(spec, sources, library)
 }
 
-func GenerateRules(dir string, sources Deps, dune string) []RuleResult {
+func GenerateRules(dir string, sources Deps, dune string, library bool) []RuleResult {
   name := filepath.Base(dir)
   if dune == "" {
-    return GenerateRulesAuto(name, sources)
+    return GenerateRulesAuto(name, sources, library)
   } else {
-    return GenerateRulesDune(name, sources, dune)
+    return GenerateRulesDune(name, sources, dune, library)
   }
 }
 
@@ -105,6 +105,10 @@ var libKinds = map[string]LibraryKind {
   "ppx_ns_library": LibNsPpx{},
   "ocaml_library": LibPlain{},
   "ppx_library": LibPpx{},
+  "ocaml_ns_archive": LibNs{},
+  "ppx_ns_archive": LibNsPpx{},
+  "ocaml_archive": LibPlain{},
+  "ppx_archive": LibPpx{},
 }
 
 func isLibrary(r *rule.Rule) bool {
@@ -211,7 +215,7 @@ func existingLibraries(rules []*rule.Rule, sources Deps) PackageSpec {
   return PackageSpec{libs, nil}
 }
 
-func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps) []RuleResult {
+func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps, library bool) []RuleResult {
   spec := existingLibraries(rules, sources)
-  return multilib(spec, sources)
+  return multilib(spec, sources, library)
 }

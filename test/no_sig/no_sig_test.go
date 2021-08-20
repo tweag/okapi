@@ -94,7 +94,7 @@ func run(t *testing.T, cmd... string) string {
 
 func TestVirtual(t *testing.T) {
   ws := run(t, "info", "workspace")
-  run(t, "run", "//:gazelle")
+  run(t, "run", "//:gazelle", "--", "--library")
   checkFile(t, ws, libBuildTarget, "lib", "BUILD.bazel")
 }
 

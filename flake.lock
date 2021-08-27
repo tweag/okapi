@@ -37,11 +37,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1627988431,
-        "narHash": "sha256-u4f3h2LpYBt4sX7HF5TzfhuPqKZGfdOZhybzzEmOkjc=",
+        "lastModified": 1630071676,
+        "narHash": "sha256-9dOYEzWZg9MLBsGulm0dQm5hiFosXTKWbBCAiTEUaNM=",
         "owner": "tek",
         "repo": "rules_ocaml",
-        "rev": "9f82bf1f0b4886b66dd9bbf1d57d4e30f2e5b990",
+        "rev": "5d2a9a5103581c95cb27243bf3ada2e0c366486e",
         "type": "github"
       },
       "original": {

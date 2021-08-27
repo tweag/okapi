@@ -47,14 +47,14 @@ ocaml_module(
 )
 
 ocaml_signature(
-    name = "prog_sig",
+    name = "prog__sig",
     src = ":prog.mli",
     deps = [":sig"],
 )
 
 ocaml_module(
     name = "prog",
-    sig = ":prog_sig",
+    sig = ":prog__sig",
     struct = ":prog.ml",
     deps = [":sig"],
 )

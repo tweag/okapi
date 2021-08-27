@@ -1,0 +1,23 @@
+name: Test
+on:
+  push:
+    branches:
+      - "**"
+jobs:
+  test:
+    name: Test with nixpkgs
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macos]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: cachix/install-nix-action@v12
+      - name: Configure
+        run: |
+          cat >.bazelrc.local <<EOF
+          build --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host
+          EOF
+      - name: Test
+        run: './nix-bazel test //...'

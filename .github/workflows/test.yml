@@ -24,4 +24,6 @@ jobs:
           build --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host
           EOF
       - name: Test
-        run: './nix-bazel test //...'
+        run: |
+          nix run .#install
+          ./nix-bazel test //...

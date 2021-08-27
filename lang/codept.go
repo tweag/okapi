@@ -60,9 +60,12 @@ type Source struct {
   generator Generator
 }
 
-func sortSources(srcs []Source) {
-  sort.Slice(srcs, func(i, j int) bool { return srcs[i].name < srcs[j].name })
-}
+type SourceSlice []Source
+
+func (s SourceSlice) Len() int { return len(s) }
+func (s SourceSlice) Less(i, j int) bool { return s[i].name < s[j].name }
+func (s SourceSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s SourceSlice) Sort() { sort.Sort(s) }
 
 type Deps = map[string]Source
 

@@ -14,9 +14,9 @@ def okapi_deps():
     maybe(
         http_archive,
         name = "obazl_rules_ocaml",
-        strip_prefix = "rules_ocaml-10f9935c7fde2a607dc849faffe3fc617fd08442",
-        url = "https://github.com/tek/rules_ocaml/archive/10f9935c7fde2a607dc849faffe3fc617fd08442.tar.gz",
-        sha256 = "506f3aca6be3c022f083d6c6cdadced525958a2164d86ed93ad6ac5388356a19",
+        strip_prefix = "rules_ocaml-ad4c5562fb4a3cade5764129d61d4e2f6fdf77ac",
+        url = "https://github.com/tek/rules_ocaml/archive/ad4c5562fb4a3cade5764129d61d4e2f6fdf77ac.tar.gz",
+        sha256 = "5df21041e154d3f1e6914779862cf1843d6e7364fdcb72306441a22ced3147b8",
     )
     maybe(
         http_archive,

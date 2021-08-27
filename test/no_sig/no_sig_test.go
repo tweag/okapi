@@ -41,11 +41,6 @@ okapi_setup_legacy()
 const libBuildTarget = `
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
-ocaml_module(
-    name = "sig",
-    struct = ":sig.ml",
-)
-
 ocaml_signature(
     name = "prog__sig",
     src = ":prog.mli",
@@ -57,6 +52,11 @@ ocaml_module(
     sig = ":prog__sig",
     struct = ":prog.ml",
     deps = [":sig"],
+)
+
+ocaml_module(
+    name = "sig",
+    struct = ":sig.ml",
 )
 
 # okapi:auto

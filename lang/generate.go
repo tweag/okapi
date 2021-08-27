@@ -13,9 +13,9 @@ import (
 func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
   var keys []string
   for key := range sources { keys = append(keys, key) }
-  var modules []Source
+  var modules SourceSlice
   for _, key := range keys { modules = append(modules, sources[key]) }
-  sortSources(modules)
+  modules.Sort()
   lib := Component{
     core: ComponentCore{
       name: name,

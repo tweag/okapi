@@ -234,7 +234,9 @@ func remove(name string, deps []string) []string {
 
 func librarySourceRules(component Component, lib Library, sources Deps) []RuleResult {
   var rules []RuleResult
-  for _, src := range lib.virtualModules {
+  var m SourceSlice = lib.virtualModules
+  m.Sort()
+  for _, src := range m {
     if src.generator == nil {
       log.Fatalf("no generator for %#v", src)
     }
@@ -265,7 +267,9 @@ func sourceRule(src Source, component Component) []RuleResult {
 func sourceRules(sources Deps, component Component) []RuleResult {
   var rules []RuleResult
   rules = append(rules, extraRules(component.ppx, component.core.name)...)
-  for _, src := range component.modules {
+  var m SourceSlice = component.modules
+  m.Sort()
+  for _, src := range m {
     rules = append(rules, sourceRule(src, component)...)
   }
   if lib, isLib := component.kind.(Library); isLib {

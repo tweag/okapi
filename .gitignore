@@ -7,3 +7,4 @@
 /test/*/bazel/
 /test/temp/
 _build
+/.bazelrc.local

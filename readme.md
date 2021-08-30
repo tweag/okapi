@@ -5,9 +5,11 @@ It uses [codept] to compute the module dependencies.
 
 # Usage
 
-Okapi configures most of Gazelle's boilerplate with a few helper macros for `WORKSPACE` and `BUILD`.
+Okapi configures most of Gazelle's boilerplate with a few helper macros for `WORKSPACE.bazel` and `BUILD.bazel`.
 
-The file `WORKSPACE` specifies dependencies on Okapi, Gazelle and OBazl and handles project-wide setup:
+## `WORKSPACE.bazel`
+
+The file `WORKSPACE.bazel` specifies dependencies on Okapi, Gazelle and OBazl and handles project-wide setup:
 
 ```bzl
 workspace(name = "obazl-project-1")
@@ -26,10 +28,9 @@ http_archive(
 load("@okapi//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 
+# Configure default toolchains
 load("@okapi//bzl:setup.bzl", "okapi_setup")
 okapi_setup()
-
-# configure Go toolchain here
 
 # This is the standard OBazl setup, requires an existing OPAM repository with the switch and compiler specified here
 load("@obazl_rules_ocaml//ocaml:providers.bzl", "BuildConfig", "OpamConfig")
@@ -44,8 +45,17 @@ load("@obazl_rules_ocaml//ocaml:bootstrap.bzl", "ocaml_configure")
 ocaml_configure(build = "4.10", opam = opam)
 ```
 
-For a project that uses `rules_nixpkgs`, an alternative setup macro called `okapi_setup_nix` additionally configures the
-Go toolchain through nixpkgs.
+If you want to configure the Go toolchain manually, replace `okapi_setup()` with your own logic, like:
+
+```bzl
+load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
+
+go_rules_dependencies()
+
+go_register_toolchains(version = "1.17")
+```
+
+## `BUILD.bazel`
 
 The file `BUILD.bazel` defines the target that integrates Gazelle, so that build file generation can be triggered by
 running `bazel run //:gazelle`:

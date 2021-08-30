@@ -319,7 +319,7 @@ func untitlecase(name string) string {
 }
 
 func moduleSources(names []string, sources Deps, choices []Source) []Source {
-  var result []Source
+  var result SourceSlice
   for _, name := range names {
     if src, exists := sources[name]; exists {
       result = append(result, src)
@@ -330,7 +330,7 @@ func moduleSources(names []string, sources Deps, choices []Source) []Source {
     }
   }
   final := append(result, choices...)
-  sortSources(final)
+  final.Sort()
   return final
 }
 

@@ -17,9 +17,9 @@ def okapi_setup_nix():
         name = "nixpkgs",
         revision = "21.05",
     )
-    # nixpkgs_go_configure(repository = "@nixpkgs", fail_not_supported = False)
-    nixpkgs_go_configure(repository = "@nixpkgs")
-    okapi_setup()
+    nixpkgs_go_configure(repository = "@nixpkgs", fail_not_supported = False)
+    go_rules_dependencies()
+    gazelle_dependencies(go_repository_default_config = "@//:WORKSPACE.bazel")
 
 def okapi_setup_legacy():
     okapi_setup_gen(ws = "WORKSPACE")

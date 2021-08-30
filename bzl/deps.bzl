@@ -21,9 +21,9 @@ def okapi_deps():
     maybe(
         http_archive,
         name = "io_tweag_rules_nixpkgs",
-        sha256 = "6bedf80d6cb82d3f1876e27f2ff9a2cc814d65f924deba14b49698bb1fb2a7f7",
-        strip_prefix = "rules_nixpkgs-a388ab60dea07c3fc182453e89ff1a67c9d3eba6",
-        urls = ["https://github.com/tweag/rules_nixpkgs/archive/a388ab60dea07c3fc182453e89ff1a67c9d3eba6.tar.gz"],
+        sha256 = "8204bb4db303cc29261548f6cad802f63cddc053f8a747401561e0c36dcd49a8",
+        strip_prefix = "rules_nixpkgs-1d29b771db75b8d18f5f5baa8f99be16325b897e",
+        urls = ["https://github.com/tweag/rules_nixpkgs/archive/1d29b771db75b8d18f5f5baa8f99be16325b897e.tar.gz"],
     )
     maybe(
         http_archive,

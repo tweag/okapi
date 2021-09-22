@@ -6,5 +6,6 @@
 /test/*/bazel-*
 /test/*/bazel/
 /test/temp/
+/example/*/bazel-*
 _build
 /.bazelrc.local

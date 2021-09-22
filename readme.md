@@ -169,7 +169,7 @@ Virtual modules are supported.
 
 Given a Dune config like this:
 
-```dune
+```lisp
 (library
  (name sub_lib)
  (public_name sub-lib)
@@ -192,7 +192,7 @@ Given a Dune config like this:
 
 The generated build will be:
 
-```dune
+```bzl
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_module(

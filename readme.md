@@ -58,7 +58,7 @@ go_register_toolchains(version = "1.17")
 ## `BUILD.bazel`
 
 The file `BUILD.bazel` defines the target that integrates Gazelle, so that build file generation can be triggered by
-running `bazel run //:gazelle`:
+running `bazel run --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host //:gazelle`:
 
 ```bzl
 load(
@@ -91,14 +91,14 @@ generate()
 Now build files for directories containing OCaml sources will be generated when running:
 
 ```sh
-bazel run //:gazelle
+bazel run --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host //:gazelle
 ```
 
-This repository contains an example project in `test/project-1`.
+This repository contains an example project in `example/project-1`.
 Build generation can be observed in action by running the following command in that directory:
 
 ```sh
-rm -f a/BUILD.bazel a/sub/BUILD.bazel && bazel run //:gazelle && bazel build //a:#A
+rm -f a/BUILD.bazel a/sub/BUILD.bazel && bazel run --host_platform=@io_tweag_rules_nixpkgs//nixpkgs/platforms:host //:gazelle && bazel build //a:#A
 ```
 
 This creates the following `a/BUILD.bazel`:
@@ -169,7 +169,7 @@ Virtual modules are supported.
 
 Given a Dune config like this:
 
-```dune
+```lisp
 (library
  (name sub_lib)
  (public_name sub-lib)
@@ -192,7 +192,7 @@ Given a Dune config like this:
 
 The generated build will be:
 
-```dune
+```bzl
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_module(

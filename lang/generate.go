@@ -18,8 +18,10 @@ func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
   modules.Sort()
   lib := Component{
     core: ComponentCore{
-      name: name,
-      publicName: name,
+      name: ComponentName{
+        name: name,
+        public: name,
+      },
       flags: nil,
       auto: true,
     },
@@ -37,7 +39,7 @@ func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
 
 func GenerateRulesDune(name string, sources Deps, duneCode string, library bool) []RuleResult {
   conf := parseDuneFile(duneCode)
-  duneConf := DecodeDuneConfig(name, conf)
+  duneConf := decodeDuneConfig(name, conf)
   spec := duneToSpec(duneConf)
   return multilib(spec, sources, library)
 }
@@ -188,8 +190,10 @@ func existingLibrary(r *rule.Rule, sources Deps) (ComponentSpec, bool) {
     if kind.ppx() { ppx = PpxTransitive{} }
     lib := ComponentSpec{
       core: ComponentCore{
-        name: nameSlug,
-        publicName: publicName,
+        name: ComponentName{
+          name: nameSlug,
+          public: publicName,
+        },
         flags: nil,
         auto: hasTag("auto", r),
       },
@@ -212,7 +216,7 @@ func existingLibraries(rules []*rule.Rule, sources Deps) PackageSpec {
   for _, r := range rules {
     if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }
   }
-  return PackageSpec{libs, nil}
+  return PackageSpec{libs, nil, nil}
 }
 
 func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps, library bool) []RuleResult {

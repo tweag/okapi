@@ -134,22 +134,28 @@ func libraryModules(srcs []Source) []string {
   return result
 }
 
-func (lib Library) componentRule(component Component, library bool) *rule.Rule {
-  libName := "lib-" + component.core.name
-  if lib.kind.wrapped() { libName = nsName(component.core.name) }
-  r := rule.NewRule(lib.kind.ruleKind(library), libName)
+func libraryRule(lib Library, component Component, library bool, name string, publicName string) *rule.Rule {
+  r := rule.NewRule(lib.kind.ruleKind(library), name)
   mods := append(component.modules, lib.virtualModules...)
   r.SetAttr(moduleAttr(lib.kind.wrapped()), libraryModules(mods))
   if lib.implements != "" {
     r.AddComment("# okapi:implements " + lib.implements)
-    r.AddComment("# okapi:implementation " + component.core.publicName)
+    r.AddComment("# okapi:implementation " + publicName)
   }
   return r
 }
 
+func (lib Library) componentRule(component Component, library bool) *rule.Rule {
+  name := component.core.name
+  libName := "lib-" + name.name
+  if lib.kind.wrapped() { libName = nsName(name.name) }
+  return libraryRule(lib, component, library, libName, name.public)
+}
+
 func (exe Executable) componentRule(component Component, library bool) *rule.Rule {
-  r := rule.NewRule(exe.kind.ruleKind(library), "exe-" + component.core.publicName)
-  r.SetAttr("main", component.core.name)
+  name := component.core.name
+  r := rule.NewRule(exe.kind.ruleKind(library), "exe-" + name.public)
+  r.SetAttr("main", name.name)
   r.SetAttr("deps", libraryModules(component.modules))
   return r
 }
@@ -177,7 +183,7 @@ func commonAttrs(component Component, r *rule.Rule, deps []string) RuleResult {
   libDeps := append(append(component.depsOpam, component.ppx.depsOpam()...), component.kind.extraDeps()...)
   extendAttr(r, "opts", component.core.flags)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  addAttrs(component.core.name, r, component.ppx)
+  addAttrs(component.core.name.name, r, component.ppx)
   return RuleResult{r, libDeps}
 }
 
@@ -241,7 +247,7 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
       log.Fatalf("no generator for %#v", src)
     }
     cleanDeps := remove(src.name, src.deps)
-    rules = append(rules, commonAttrs(component, virtualSignatureRule(component.core.publicName, src), cleanDeps))
+    rules = append(rules, commonAttrs(component, virtualSignatureRule(component.core.name.public, src), cleanDeps))
   }
   return rules
 }
@@ -266,7 +272,7 @@ func sourceRule(src Source, component Component) []RuleResult {
 
 func sourceRules(sources Deps, component Component) []RuleResult {
   var rules []RuleResult
-  rules = append(rules, extraRules(component.ppx, component.core.name)...)
+  rules = append(rules, extraRules(component.ppx, component.core.name.name)...)
   var m SourceSlice = component.modules
   m.Sort()
   for _, src := range m {
@@ -281,16 +287,18 @@ func sourceRules(sources Deps, component Component) []RuleResult {
 func setLibraryModules(component Component, r *rule.Rule) {
 }
 
-func componentRule(component Component, library bool) RuleResult {
+func componentRule(component Component, library bool) []RuleResult {
+  var result []RuleResult
   r := component.kind.componentRule(component, library)
   if component.core.auto { r.AddComment("# okapi:auto") }
-  r.AddComment("# okapi:public_name " + component.core.publicName)
+  r.AddComment("# okapi:public_name " + component.core.name.public)
   r.SetAttr("visibility", []string{"//visibility:public"})
-  return RuleResult{r, component.depsOpam}
+  result = append(result, RuleResult{r, component.depsOpam})
+  return result
 }
 
 func component(sources Deps, component Component, library bool) []RuleResult {
-  return append(sourceRules(sources, component), componentRule(component, library))
+  return append(sourceRules(sources, component), componentRule(component, library)...)
 }
 
 type ComponentSources struct {
@@ -301,7 +309,7 @@ type ComponentSources struct {
 func componentWithSources(comp ComponentSpec, generated map[string][]string, sources Deps) ComponentSources {
   return ComponentSources{
     component: comp,
-    sources: moduleSources(append(comp.modules.names(), generated[comp.core.name]...), sources, comp.choices),
+    sources: moduleSources(append(comp.modules.names(), generated[comp.core.name.name]...), sources, comp.choices),
   }
 }
 

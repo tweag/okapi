@@ -33,11 +33,13 @@ var defaultLibKind = LibSpec{
 
 func TestDuneParse(t *testing.T) {
   sexp := parseDune(duneFile)
-  output := DecodeDuneConfig("test", sexp)
+  output := decodeDuneConfig("test", sexp)
   target1 := DuneComponent{
-    core: ComponentCore{
-      name: "sub_lib",
-      publicName: "sub-lib",
+    core: DuneComponentCore{
+      names: []ComponentName{{
+          name: "sub_lib",
+          public: "sub-lib",
+      }},
       flags: []string{"-open", "Angstrom"},
       auto: true,
     },
@@ -56,9 +58,11 @@ func TestDuneParse(t *testing.T) {
     kind: defaultLibKind,
   }
   target2 := DuneComponent{
-    core: ComponentCore{
-      name: "sub_extra_lib",
-      publicName: "sub-extra-lib",
+    core: DuneComponentCore{
+      names: []ComponentName{{
+        name: "sub_extra_lib",
+        public: "sub-extra-lib",
+      }},
       flags: nil,
       auto: false,
     },
@@ -77,15 +81,15 @@ func TestDuneParse(t *testing.T) {
 
 func TestDuneAssignGenerated(t *testing.T) {
   comp1 := DuneComponent{
-    core: ComponentCore{name: "comp1", auto: false},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp1", public: ""}}, auto: false},
     modules: ConcreteModules{[]string{"lex1", "mod1"}},
   }
   comp2 := DuneComponent{
-    core: ComponentCore{name: "comp2", auto: true},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp2", public: ""}}, auto: true},
     modules: AutoModules{},
   }
   comp3 := DuneComponent{
-    core: ComponentCore{name: "comp3", auto: false},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp3", public: ""}}, auto: false},
     modules: ConcreteModules{[]string{"lex2", "mod2"}},
   }
   comps := []DuneComponent{comp1, comp2, comp3}
@@ -101,4 +105,8 @@ func TestDuneAssignGenerated(t *testing.T) {
   if !reflect.DeepEqual(result, target) {
     t.Fatalf("Generators weren't assigned correctly:\n\n%#v\n\n%#v", result, target)
   }
+}
+
+func TestDuneExecutables(t *testing.T) {
+  
 }

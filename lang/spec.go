@@ -25,9 +25,13 @@ func (AutoModules) auto() bool { return true }
 func (ConcreteModules) auto() bool { return false }
 func (ExcludeModules) auto() bool { return true }
 
-type ComponentCore struct {
+type ComponentName struct {
   name string
-  publicName string
+  public string
+}
+
+type ComponentCore struct {
+  name ComponentName
   flags []string
   auto bool
 }
@@ -75,5 +79,6 @@ type ComponentSpec struct {
 
 type PackageSpec struct {
   components []ComponentSpec
+  modules []ModuleSpec
   generated []string
 }

@@ -25,7 +25,7 @@ type DuneComponent struct {
   libraries []DuneLibDep
   ppx bool
   preprocess []string
-  kind KindSpec // Whether it's an executable or library
+  kind KindSpec
 }
 
 type DuneConfig struct {

@@ -22,6 +22,7 @@ type Config struct {
   library *bool
 }
 
+// Entry point to Gazelle
 func NewLanguage() language.Language { return &okapiLang{} }
 
 func (*okapiLang) Name() string { return okapiName }
@@ -39,6 +40,7 @@ func (*okapiLang) KnownDirectives() []string { return []string{} }
 
 func (*okapiLang) Configure(c *config.Config, rel string, f *rule.File) {}
 
+// Related to merge
 var defaultKind = rule.KindInfo{
   MatchAny: false,
   MatchAttrs: []string{},
@@ -68,6 +70,7 @@ var kinds = map[string]rule.KindInfo {
 
 func (*okapiLang) Kinds() map[string]rule.KindInfo { return kinds }
 
+// Load OBazl stuff (functions)
 func (*okapiLang) Loads() []rule.LoadInfo {
   return []rule.LoadInfo{
     {
@@ -95,6 +98,7 @@ func (*okapiLang) Loads() []rule.LoadInfo {
 
 func (*okapiLang) Fix(c *config.Config, f *rule.File) {}
 
+// Build the dictionary of libraries (not Opam dependencies) that will be used for dep resolution afterwards
 func (*okapiLang) Imports(c *config.Config, r *rule.Rule, f *rule.File) []resolve.ImportSpec {
   var imports []resolve.ImportSpec
   if isLibrary(r) {
@@ -163,6 +167,7 @@ func generateIfOcaml(args language.GenerateArgs, library bool) []RuleResult {
   }
 }
 
+// Main entry point for Okapi.
 func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateResult {
   config, valid := args.Config.Exts[okapiName].(Config)
   if !valid { log.Fatalf("invalid config: %#v", args.Config.Exts[okapiName]) }
@@ -172,6 +177,7 @@ func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateRes
   } else {
     results = generateIfOcaml(args, *config.library)
   }
+	// Poorman's unzip
   var rules []*rule.Rule
   var imports []interface{}
   for _, result := range results {

@@ -1,14 +1,23 @@
 package okapi
 
+// A `modules` stanza (may be absent, in that case auto = true)
 type ModuleSpec interface {
   names() []string
   specifies(mod string) bool
   auto() bool
 }
+
+// AutoModules implements ModuleSpec
+// Either `:standard` or unspecified
+// Note: limitation: a `modules` stanza can contain both `:standard` and concrete modules
 type AutoModules struct {}
+
+// ConcreteModules implements ModuleSpec
 type ConcreteModules struct {
   modules []string
 }
+
+// ExcludeModules implements ModuleSpec
 type ExcludeModules struct {
   modules []string
 }
@@ -40,14 +49,17 @@ type KindSpec interface {
   toObazl(PpxKind, Deps) ComponentKind
 }
 
+// LibSpec implements KindSpec
 type LibSpec struct {
   wrapped bool
   virtualModules []string
   implements string
 }
 
+// ExeSpec implements KindSpec
 type ExeSpec struct {}
 
+// LibSpec implements KindSpec
 func (lib LibSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
   var modules []Source
   for _, mod := range lib.virtualModules {
@@ -60,6 +72,7 @@ func (lib LibSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
   }
 }
 
+// ExeSpec implements KindSpec
 func (ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
   var kind ExeKind = ExePlain{}
   if ppx.isPpx() { kind = ExePpx{} }
@@ -68,15 +81,17 @@ func (ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
   }
 }
 
+// Executable | Library | Test
 type ComponentSpec struct {
   core ComponentCore
-  modules ModuleSpec
+  modules ModuleSpec // Could only be module names ([]string) and let PackageSpec store the module data
   depsOpam []string
   ppx PpxKind
   choices []Source
   kind KindSpec
 }
 
+// Directory (or Dune file or Bazel build file)
 type PackageSpec struct {
   components []ComponentSpec
   modules []ModuleSpec

@@ -194,6 +194,51 @@ func runCodept(dir string, sources map[string]CodeptSource) []byte {
   return out
 }
 
+// Here "dependencies" means "OCaml modules", not Libraries or Opam deps, based on Codept.
+// Example codept command:
+//
+// `codept -native -deps /home/sir4ur0n/code/qcheck/src/core/*.{ml,mli}`
+//
+// Output:
+//
+//   {
+//   "version" : [0, 11, 0],
+//   "dependencies" :
+//     [{
+//      "file" : "/home/sir4ur0n/code/qcheck/src/core/QCheck.mli",
+//      "deps" : [["Random"], ["QCheck2"], ["Hashtbl"], ["Format"]]
+//      },
+//     {
+//     "file" : "/home/sir4ur0n/code/qcheck/src/core/QCheck2.mli",
+//     "deps" : [["Seq"], ["Random"], ["Hashtbl"], ["Format"]]
+//     },
+//     {
+//     "file" : "/home/sir4ur0n/code/qcheck/src/core/QCheck.ml",
+//     "deps" :
+//       [["Sys"], ["String"], ["Set"], ["Random"], ["Queue"], ["QCheck2"],
+//       ["Printf"], ["Obj"], ["List"], ["Int64"], ["Int32"], ["Int"],
+//       ["Hashtbl"], ["Char"], ["Bytes"], ["Buffer"], ["Array"]]
+//     },
+//     {
+//     "file" : "/home/sir4ur0n/code/qcheck/src/core/QCheck2.ml",
+//     "deps" :
+//       [["Sys"], ["String"], ["Seq"], ["Result"], ["Random"], ["Printf"],
+//       ["Printexc"], ["Option"], ["List"], ["Lazy"], ["Int64"], ["Int32"],
+//       ["Int"], ["Hashtbl"], ["Fun"], ["Format"], ["Float"], ["Char"],
+//       ["Bytes"], ["Buffer"], ["Array"]]
+//     }],
+//   "local" :
+//     [{
+//      "module" : ["QCheck"],
+//      "ml" : "/home/sir4ur0n/code/qcheck/src/core/QCheck.ml",
+//      "mli" : "/home/sir4ur0n/code/qcheck/src/core/QCheck.mli"
+//      },
+//     {
+//     "module" : ["QCheck2"],
+//     "ml" : "/home/sir4ur0n/code/qcheck/src/core/QCheck2.ml",
+//     "mli" : "/home/sir4ur0n/code/qcheck/src/core/QCheck2.mli"
+//     }]
+//   }
 func Dependencies(dir string, files []string) Deps {
   sources := prepareSources(dir, files)
   out := runCodept(dir, sources)

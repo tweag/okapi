@@ -18,18 +18,20 @@ type DuneComponentCore struct {
   auto bool
 }
 
+// Either Executable Library
 type DuneComponent struct {
   core DuneComponentCore
-  modules ModuleSpec
+  modules ModuleSpec // TODO Probably aim to remove it (only store module names/keys/ids)
   libraries []DuneLibDep
   ppx bool
   preprocess []string
-  kind KindSpec
+  kind KindSpec // Whether it's an executable or library
 }
 
 type DuneConfig struct {
   components []DuneComponent
   generated []string
+	// TODO add here the map[moduleKey]ModuleSpec here
 }
 
 func parseDune(code string) SexpList {
@@ -231,7 +233,7 @@ func decodeDuneConfig(libName string, conf SexpList) DuneConfig {
         name := data.string("name")
         publicName := data.stringOr("public_name", name)
         components = append(components, duneComponent(data, name, publicName, dune))
-      } else if dune.Name == "library" || dune.Name == "executable" || dune.Name == "executables" {
+      } else if dune.Name == "executables" {
         components = append(components, duneExecutables(libName, dune)...)
       }
     }

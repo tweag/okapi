@@ -8,6 +8,8 @@
 
     in obazl.systems {
       inherit depsOpam;
-      extraInputs = pkgs: [ pkgs.go ];
+      extraInputs = pkgs:
+        [ # pkgs.go
+        ];
     };
 }

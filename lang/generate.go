@@ -145,6 +145,8 @@ func isSignature(r *rule.Rule) bool {
 }
 
 var executableKinds = map[string]bool {
+  "ocaml_test": true,
+  "ppx_test": true,
   "ocaml_executable": true,
   "ppx_executable": true,
 }

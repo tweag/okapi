@@ -58,7 +58,9 @@ type LibSpec struct {
 }
 
 // ExeSpec implements KindSpec
-type ExeSpec struct {}
+type ExeSpec struct {
+  test bool
+}
 
 // LibSpec implements KindSpec
 func (lib LibSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
@@ -74,20 +76,21 @@ func (lib LibSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
 }
 
 // ExeSpec implements KindSpec
-func (ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
+func (spec ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
   var kind ExeKind = ExePlain{}
   if ppx.isPpx() { kind = ExePpx{} }
   return Executable{
     kind: kind,
+    test: spec.test,
   }
 }
 
 // Executable | Library | Test
 type ComponentSpec struct {
   core ComponentCore
-	// `modules` in Dune lingo
+  // `modules` in Dune lingo
   modules ModuleSpec
-	// `libraries` in Dune lingo
+  // `libraries` in Dune lingo
   depsOpam []string
   ppx PpxKind
   choices []Source

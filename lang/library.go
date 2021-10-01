@@ -70,15 +70,27 @@ func (LibPpx) wrapped() bool { return false }
 func (LibPlain) wrapped() bool { return false }
 
 type ExeKind interface {
-  ruleKind(library bool) string
+  ruleKind(test bool) string
   ppx() bool
 }
 
 type ExePpx struct {}
 type ExePlain struct {}
 
-func (ExePpx) ruleKind(library bool) string { return "ppx_executable" }
-func (ExePlain) ruleKind(library bool) string { return "ocaml_executable" }
+func (ExePpx) ruleKind(test bool) string {
+  if test {
+    return "ppx_test"
+  } else {
+    return "ppx_executable"
+  }
+}
+func (exe ExePlain) ruleKind(test bool) string {
+  if test {
+    return "ocaml_test"
+  } else {
+    return "ocaml_executable"
+  }
+}
 
 func (ExePpx) ppx() bool { return true }
 func (ExePlain) ppx() bool { return false }
@@ -96,6 +108,7 @@ type Library struct {
 
 type Executable struct {
   kind ExeKind
+  test bool
 }
 
 // TODO store stuff like auto, exclude in annotations
@@ -154,7 +167,7 @@ func (lib Library) componentRule(component Component, library bool) *rule.Rule {
 
 func (exe Executable) componentRule(component Component, library bool) *rule.Rule {
   name := component.core.name
-  r := rule.NewRule(exe.kind.ruleKind(library), "exe-" + name.public)
+  r := rule.NewRule(exe.kind.ruleKind(exe.test), "exe-" + name.public)
   r.SetAttr("main", name.name)
   r.SetAttr("deps", libraryModules(component.modules))
   return r

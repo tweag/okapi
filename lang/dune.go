@@ -167,7 +167,9 @@ func duneComponentKind(lib SexpComponent) KindSpec {
       implements: lib.stringOptional("implements"),
     }
   } else if lib.data.Name == "executable" || lib.data.Name == "executables" {
-    return ExeSpec{}
+    return ExeSpec{test: false}
+  } else if lib.data.Name == "test" || lib.data.Name == "tests" {
+    return ExeSpec{test: true}
   }
   return nil
 }
@@ -177,7 +179,7 @@ func duneComponent(data SexpComponent, name string, publicName string, conf Sexp
   modules := duneModules(data.list("modules"))
   return DuneComponent{
     core: DuneComponentCore{
-      names: []ComponentName{ComponentName{
+      names: []ComponentName{{
         name: name,
         public: publicName,
       }},
@@ -233,7 +235,7 @@ func decodeDuneConfig(libName string, conf SexpList) DuneConfig {
         name := data.string("name")
         publicName := data.stringOr("public_name", name)
         components = append(components, duneComponent(data, name, publicName, dune))
-      } else if dune.Name == "executables" {
+      } else if dune.Name == "executables" || dune.Name == "tests" {
         components = append(components, duneExecutables(libName, dune)...)
       }
     }

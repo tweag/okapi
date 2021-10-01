@@ -136,7 +136,7 @@ ocaml_ns_library(
 const subBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ppx_executable", "ppx_module", "ppx_ns_library")
 
 ppx_executable(
-    name = "ppx_sub_lib",
+    name = "ppx_set-0",
     deps_opam = ["ppx_inline_test"],
     main = "@obazl_rules_ocaml//dsl:ppx_driver",
 )
@@ -153,7 +153,7 @@ ppx_module(
         "-open",
         "Angstrom",
     ],
-    ppx = ":ppx_sub_lib",
+    ppx = ":ppx_set-0",
     ppx_print = "@ppx//print:text",
     ppx_tags = ["inline-test"],
     struct = ":final.ml",
@@ -171,21 +171,10 @@ ppx_module(
         "-open",
         "Angstrom",
     ],
-    ppx = ":ppx_sub_lib",
+    ppx = ":ppx_set-0",
     ppx_print = "@ppx//print:text",
     ppx_tags = ["inline-test"],
     struct = ":sub.ml",
-)
-
-# okapi:auto
-# okapi:public_name sub-lib
-ppx_ns_library(
-    name = "#Sub_lib",
-    submodules = [
-        ":final",
-        ":sub",
-    ],
-    visibility = ["//visibility:public"],
 )
 
 ocaml_module(
@@ -209,6 +198,17 @@ ocaml_ns_library(
     submodules = [
         ":bar",
         ":foo",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# okapi:auto
+# okapi:public_name sub-lib
+ppx_ns_library(
+    name = "#Sub_lib",
+    submodules = [
+        ":final",
+        ":sub",
     ],
     visibility = ["//visibility:public"],
 )

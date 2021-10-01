@@ -177,7 +177,7 @@ func (*okapiLang) GenerateRules(args language.GenerateArgs) language.GenerateRes
   if !valid { log.Fatalf("invalid config: %#v", args.Config.Exts[okapiName]) }
   var results []RuleResult
   if args.File != nil && args.File.Rules != nil && containsLibrary(args.File.Rules) {
-    results = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles), *config.library)
+    // results = AmendRules(args, args.File.Rules, Dependencies(args.Dir, args.RegularFiles), *config.library)
   } else {
     results = generateIfOcaml(args, *config.library)
   }

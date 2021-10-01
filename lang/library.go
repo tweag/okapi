@@ -101,6 +101,7 @@ type ComponentKind interface {
 }
 
 type Library struct {
+  name ComponentName
   virtualModules []Source
   implements string
   kind LibraryKind
@@ -113,12 +114,52 @@ type Executable struct {
 
 // TODO store stuff like auto, exclude in annotations
 type Component struct {
-  core ComponentCore
-  modules []Source
+  name ComponentName
+  sources *SourceSet
+  annotations []string
+}
+
+type ComponentSlice []Component
+
+func (s ComponentSlice) Len() int { return len(s) }
+func (s ComponentSlice) Less(i, j int) bool { return s[i].name.name < s[j].name.name }
+func (s ComponentSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s ComponentSlice) Sort() { sort.Sort(s) }
+
+func sortedComponents(srcs []Component) []Component {
+  var sources ComponentSlice = srcs
+  sources.Sort()
+  return sources
+}
+
+type SourceSet struct {
+  name string
+  sources []Source
+  spec ModuleSpec
   depsOpam []string
   ppx PpxKind
   kind ComponentKind
-  annotations []string
+  flags []string
+  mains []string
+  // TODO merge with sources before constructing
+}
+
+type SourceSetSlice []SourceSet
+
+func (s SourceSetSlice) Len() int { return len(s) }
+func (s SourceSetSlice) Less(i, j int) bool { return s[i].name < s[j].name }
+func (s SourceSetSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s SourceSetSlice) Sort() { sort.Sort(s) }
+
+func sortedSourceSets(srcs []SourceSet) []SourceSet {
+  var sources SourceSetSlice = srcs
+  sources.Sort()
+  return sources
+}
+
+type Package struct {
+  components []Component
+  sources []SourceSet
 }
 
 func moduleAttr(wrapped bool) string {
@@ -136,20 +177,41 @@ func targetNames(deps []string) []string {
   return result
 }
 
-func libraryModules(srcs []Source) []string {
+func libraryNames(srcs []Source) []string {
   var result []string
   for _, src := range srcs {
-    if src.generator.libraryModule() {
-      result = append(result, ":" + src.name)
-    }
+    if src.generator.libraryModule() { result = append(result, src.name) }
   }
   sort.Strings(result)
   return result
 }
 
+func prefixColon(names []string) []string {
+  var result []string
+  for _, name := range names { result = append(result, ":" + name) }
+  return result
+}
+
+func libraryModules(srcs []Source) []string {
+  return prefixColon(libraryNames(srcs))
+}
+
+func exeModules(set *SourceSet) []string {
+  all := libraryNames(set.sources)
+  var result []string
+  for _, mod := range all {
+    found := false
+    for _, main := range set.mains {
+      if mod == main { found = true }
+    }
+    if !found { result = append(result, mod) }
+  }
+  return prefixColon(result)
+}
+
 func libraryRule(lib Library, component Component, library bool, name string, publicName string) *rule.Rule {
   r := rule.NewRule(lib.kind.ruleKind(library), name)
-  mods := append(component.modules, lib.virtualModules...)
+  mods := append(component.sources.sources, lib.virtualModules...)
   r.SetAttr(moduleAttr(lib.kind.wrapped()), libraryModules(mods))
   if lib.implements != "" {
     r.AddComment("# okapi:implements " + lib.implements)
@@ -159,17 +221,17 @@ func libraryRule(lib Library, component Component, library bool, name string, pu
 }
 
 func (lib Library) componentRule(component Component, library bool) *rule.Rule {
-  name := component.core.name
+  name := component.name
   libName := "lib-" + name.name
   if lib.kind.wrapped() { libName = nsName(name.name) }
   return libraryRule(lib, component, library, libName, name.public)
 }
 
 func (exe Executable) componentRule(component Component, library bool) *rule.Rule {
-  name := component.core.name
+  name := component.name
   r := rule.NewRule(exe.kind.ruleKind(exe.test), "exe-" + name.public)
   r.SetAttr("main", name.name)
-  r.SetAttr("deps", libraryModules(component.modules))
+  r.SetAttr("deps", exeModules(component.sources))
   return r
 }
 
@@ -194,20 +256,20 @@ func appendAttr(r *rule.Rule, attr string, v string) {
   r.SetAttr(attr, append(r.AttrStrings(attr), v))
 }
 
-func commonAttrs(component Component, r *rule.Rule, deps []string) RuleResult {
-  libDeps := append(append(component.depsOpam, component.ppx.depsOpam()...), component.kind.extraDeps()...)
-  extendAttr(r, "opts", component.core.flags)
+func commonAttrs(set SourceSet, r *rule.Rule, deps []string) RuleResult {
+  libDeps := append(append(set.depsOpam, set.ppx.depsOpam()...), set.kind.extraDeps()...)
+  extendAttr(r, "opts", set.flags)
   if len(deps) > 0 { r.SetAttr("deps", targetNames(deps)) }
-  addAttrs(component.core.name.name, r, component.ppx)
+  addAttrs(set.name, r, set.ppx)
   return RuleResult{r, libDeps}
 }
 
 func sigTarget(src Source) string { return src.name + "__sig" }
 
-func signatureRule(component Component, src Source, deps []string) RuleResult {
+func signatureRule(set SourceSet, src Source, deps []string) RuleResult {
   r := rule.NewRule("ocaml_signature", sigTarget(src))
   r.SetAttr("src", ":" + src.name + ".mli")
-  return commonAttrs(component, r, deps)
+  return commonAttrs(set, r, deps)
 }
 
 func virtualSignatureRule(libName string, src Source) *rule.Rule {
@@ -217,30 +279,30 @@ func virtualSignatureRule(libName string, src Source) *rule.Rule {
   return r
 }
 
-func moduleRuleName(component Component) string {
-  if component.ppx.isPpx() { return "ppx_module" } else { return "ocaml_module" }
+func moduleRuleName(set SourceSet) string {
+  if set.ppx.isPpx() { return "ppx_module" } else { return "ocaml_module" }
 }
 
-func moduleRule(component Component, src Source, struct_ string, deps []string) RuleResult {
-  r := rule.NewRule(moduleRuleName(component), src.name)
+func moduleRule(set SourceSet, src Source, struct_ string, deps []string) RuleResult {
+  r := rule.NewRule(moduleRuleName(set), src.name)
   r.SetAttr("struct", struct_)
   if src.intf {
     r.SetAttr("sig", ":" + sigTarget(src))
-  } else if lib, isLib := component.kind.(Library); isLib && lib.implements != "" {
+  } else if lib, isLib := set.kind.(Library); isLib && lib.implements != "" {
     r.AddComment(fmt.Sprintf("# okapi:implements %s", lib.implements))
   }
-  return commonAttrs(component, r, deps)
+  return commonAttrs(set, r, deps)
 }
 
-func defaultModuleRule(component Component, src Source, deps []string) RuleResult {
-  return moduleRule(component, src, ":" + src.name + ".ml", deps)
+func defaultModuleRule(set SourceSet, src Source, deps []string) RuleResult {
+  return moduleRule(set, src, ":" + src.name + ".ml", deps)
 }
 
-func lexRules(component Component, src Source, deps []string) []RuleResult {
+func lexRules(set SourceSet, src Source, deps []string) []RuleResult {
   structName := src.name + "_ml"
   lexRule := rule.NewRule("ocaml_lex", structName)
   lexRule.SetAttr("src", ":" + src.name + ".mll")
-  modRule := moduleRule(component, src, ":" + structName, deps)
+  modRule := moduleRule(set, src, ":" + structName, deps)
   modRule.rule.SetAttr("opts", []string{"-w", "-39"})
   return []RuleResult{{lexRule, nil}, modRule}
 }
@@ -253,7 +315,7 @@ func remove(name string, deps []string) []string {
   return result
 }
 
-func librarySourceRules(component Component, lib Library, sources Deps) []RuleResult {
+func librarySourceRules(set SourceSet, lib Library) []RuleResult {
   var rules []RuleResult
   var m SourceSlice = lib.virtualModules
   m.Sort()
@@ -262,78 +324,95 @@ func librarySourceRules(component Component, lib Library, sources Deps) []RuleRe
       log.Fatalf("no generator for %#v", src)
     }
     cleanDeps := remove(src.name, src.deps)
-    rules = append(rules, commonAttrs(component, virtualSignatureRule(component.core.name.public, src), cleanDeps))
+    rules = append(rules, commonAttrs(set, virtualSignatureRule(lib.name.public, src), cleanDeps))
   }
   return rules
 }
 
 // If the source was generated, the module rule will be handled by the generator logic.
 // This still uses a potential interface though, since that may be supplied unmanaged.
-func sourceRule(src Source, component Component) []RuleResult {
+func sourceRule(set SourceSet, src Source) []RuleResult {
   var rules []RuleResult
   cleanDeps := remove(src.name, src.deps)
-  if src.intf { rules = append(rules, signatureRule(component, src, cleanDeps)) }
+  if src.intf { rules = append(rules, signatureRule(set, src, cleanDeps)) }
   if _, isNoGen := src.generator.(NoGenerator); isNoGen {
-    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
+    rules = append(rules, defaultModuleRule(set, src, cleanDeps))
   } else if _, isLexer := src.generator.(Lexer); isLexer {
-    rules = append(rules, lexRules(component, src, cleanDeps)...)
+    rules = append(rules, lexRules(set, src, cleanDeps)...)
   } else if _, isChoice := src.generator.(Choice); isChoice {
-    rules = append(rules, defaultModuleRule(component, src, cleanDeps))
+    rules = append(rules, defaultModuleRule(set, src, cleanDeps))
   } else {
     log.Fatalf("no generator for %#v", src)
   }
   return rules
 }
 
-func sourceRules(sources Deps, component Component) []RuleResult {
+func sourceRules(set SourceSet) []RuleResult {
   var rules []RuleResult
-  rules = append(rules, extraRules(component.ppx, component.core.name.name)...)
-  var m SourceSlice = component.modules
+  rules = append(rules, extraRules(set.ppx, set.name)...)
+  var m SourceSlice = set.sources
   m.Sort()
   for _, src := range m {
-    rules = append(rules, sourceRule(src, component)...)
+    rules = append(rules, sourceRule(set, src)...)
   }
-  if lib, isLib := component.kind.(Library); isLib {
-    rules = append(rules, librarySourceRules(component, lib, sources)...)
+  if lib, isLib := set.kind.(Library); isLib {
+    rules = append(rules, librarySourceRules(set, lib)...)
   }
   return rules
 }
 
-func setLibraryModules(component Component, r *rule.Rule) {
-}
-
-func componentRule(component Component, library bool) []RuleResult {
+func component(component Component, library bool) []RuleResult {
   var result []RuleResult
-  r := component.kind.componentRule(component, library)
-  if component.core.auto { r.AddComment("# okapi:auto") }
-  r.AddComment("# okapi:public_name " + component.core.name.public)
+  r := component.sources.kind.componentRule(component, library)
+  if component.sources.spec.auto() { r.AddComment("# okapi:auto") }
+  r.AddComment("# okapi:public_name " + component.name.public)
   r.SetAttr("visibility", []string{"//visibility:public"})
-  result = append(result, RuleResult{r, component.depsOpam})
+  result = append(result, RuleResult{r, component.sources.depsOpam})
   return result
-}
-
-func component(sources Deps, component Component, library bool) []RuleResult {
-  return append(sourceRules(sources, component), componentRule(component, library)...)
 }
 
 type ComponentSources struct {
   component ComponentSpec
-  sources []Source
+  sources *SourceSet
 }
 
-func componentWithSources(comp ComponentSpec, generated map[string][]string, sources Deps) ComponentSources {
-  return ComponentSources{
-    component: comp,
-    sources: moduleSources(append(comp.modules.names(), generated[comp.core.name.name]...), sources, comp.choices),
+func libChoices(sets map[int]SourceSet) map[string]bool {
+  result := make(map[string]bool)
+  for _, set := range sets {
+    for _, mod := range set.sources {
+      if c, isChoice := mod.generator.(Choice); isChoice {
+        for _, a := range c.alts {
+          result[depName(a.choice)] = true
+        }
+      }
+    }
   }
-}
-
-func componentsWithSources(components []ComponentSpec, generated map[string][]string, sources Deps) []ComponentSources {
-  var result []ComponentSources
-  for _, comp := range components { result = append(result, componentWithSources(comp, generated, sources)) }
   return result
 }
 
+func autoModules(sets map[int]SourceSet, sources Deps) []Source {
+  knownModules := make(map[string]bool)
+  choices := libChoices(sets)
+  var auto []Source
+  for _, set := range sets {
+    for _, mod := range set.sources { knownModules[mod.name] = true }
+    if lib, isLib := set.kind.(Library); isLib {
+      for _, mod := range lib.virtualModules { knownModules[mod.name] = true }
+    }
+  }
+  for name, src := range sources {
+    if _, exists := knownModules[name]; !exists {
+      if _, isChoice := choices[name]; !isChoice {
+        auto = append(auto, src)
+      }
+    }
+  }
+  return auto
+}
+
+// Assign source files that aren't mentioned explicitly in any module set to an auto set.
+// This can be either one that specifies no modules (or only :standard) or one that specifies an exclusion pattern (in
+// which case the auto modules are filtered).
 func filterAuto(auto []Source, spec ModuleSpec) []Source {
   if _, isAuto := spec.(AutoModules); isAuto {
     return auto
@@ -352,26 +431,60 @@ func filterAuto(auto []Source, spec ModuleSpec) []Source {
   }
 }
 
-func specComponent(comp ComponentSources, sources Deps, auto []Source) Component {
-  modules := comp.sources
-  modules = append(modules, filterAuto(auto, comp.component.modules)...)
+func assignAuto(auto []Source, sets map[int]SourceSet) map[int]SourceSet {
+  result := make(map[int]SourceSet)
+  for i, set := range sets {
+    set.sources = append(set.sources, filterAuto(auto, set.spec)...)
+    result[i] = set
+  }
+  return result
+}
+
+// Create final source sets from dune module specs, assigning generated modules and choices.
+// Then pair components with a pointer to the associated source set.
+func componentsWithSources(pkg PackageSpec, generated map[int][]string, deps Deps) ([]ComponentSources, []SourceSet) {
+  var components []ComponentSources
+  sourceSets := make(map[int]SourceSet)
+  for i, mods := range pkg.modules {
+    srcs := moduleSources(append(mods.modules.names(), generated[i]...), deps, mods.choices)
+    sourceSets[i] = SourceSet{
+    	name: fmt.Sprintf("set-%d", i),
+    	sources: srcs,
+    	spec: mods.modules,
+    	depsOpam: mods.depsOpam,
+    	ppx: mods.ppx,
+    	kind: mods.kind.toObazl(mods.ppx, deps),
+    	flags: mods.flags,
+      mains: mods.mains,
+    }
+  }
+  auto := autoModules(sourceSets, deps)
+  withAuto := assignAuto(auto, sourceSets)
+  var sourcesSlice []SourceSet
+  for _, ss := range withAuto {
+    sourcesSlice = append(sourcesSlice, ss)
+  }
+  for _, comp := range pkg.components {
+    ss := withAuto[comp.modules]
+    components = append(components, ComponentSources{comp, &ss})
+  }
+  return components, sourcesSlice
+}
+
+func specComponent(comp ComponentSources) Component {
   return Component{
-    core: comp.component.core,
-    modules: modules,
-    depsOpam: comp.component.depsOpam,
-    ppx: comp.component.ppx,
-    kind: comp.component.kind.toObazl(comp.component.ppx, sources),
-    annotations: nil,
+  	name: comp.component.name,
+  	sources:comp.sources,
+  	annotations: nil,
   }
 }
 
-func specComponents(spec PackageSpec, sources Deps) []Component {
+func specComponents(spec PackageSpec, sources Deps) Package {
   generated := assignGenerated(spec)
-  withSources := componentsWithSources(spec.components, generated, sources)
-  auto := autoModules(withSources, sources)
+  withSources, sets := componentsWithSources(spec, generated, sources)
   var result []Component
-  for _, comp := range withSources { result = append(result, specComponent(comp, sources, auto)) }
-  return result
+  for _, comp := range withSources { result = append(result, specComponent(comp)) }
+  return Package{result, sets}
 }
 
 // Update an existing build that has been manually amended by the user to contain more than one library.
@@ -380,55 +493,13 @@ func specComponents(spec PackageSpec, sources Deps) []Component {
 // When gazelle is then run in update mode, they will be created.
 // Either check for rules that select one of the choices or add exclude rules in comments.
 func multilib(spec PackageSpec, sources Deps, library bool) []RuleResult {
-  components := specComponents(spec, sources)
+  pkg := specComponents(spec, sources)
   var rules []RuleResult
-  for _, comp := range components {
-		rulesToAdd := component(sources, comp, library)
-		// Don't add it if it's already there (e.g. because of multiple executables depending on the same modules)
-		newRuleLabel:
-		for _, newRule := range rulesToAdd {
-			for _, existingRule := range rules {
-				if newRule.rule.Name() == existingRule.rule.Name() && newRule.rule.Kind() == existingRule.rule.Kind() {
-					// Rule already contained in the existing one: moving on instead of duplicating
-          continue newRuleLabel
-				}
-			}
-			rules = append(rules, newRule)
-		}
+  for _, srcSet := range sortedSourceSets(pkg.sources) {
+    rules = append(rules, sourceRules(srcSet)...)
+  }
+  for _, comp := range sortedComponents(pkg.components) {
+    rules = append(rules, component(comp, library)...)
   }
   return rules
-}
-
-func libChoices(libs []ComponentSources) map[string]bool {
-  result := make(map[string]bool)
-  for _, lib := range libs {
-    for _, mod := range lib.sources {
-      if c, isChoice := mod.generator.(Choice); isChoice {
-        for _, a := range c.alts {
-          result[depName(a.choice)] = true
-        }
-      }
-    }
-  }
-  return result
-}
-
-func autoModules(components []ComponentSources, sources Deps) []Source {
-  knownModules := make(map[string]bool)
-  choices := libChoices(components)
-  var auto []Source
-  for _, component := range components {
-    for _, mod := range component.sources { knownModules[mod.name] = true }
-    if lib, isLib := component.component.kind.(LibSpec); isLib {
-      for _, mod := range lib.virtualModules { knownModules[mod] = true }
-    }
-  }
-  for name, src := range sources {
-    if _, exists := knownModules[name]; !exists {
-      if _, isChoice := choices[name]; !isChoice {
-        auto = append(auto, src)
-      }
-    }
-  }
-  return auto
 }

@@ -170,10 +170,7 @@ ocaml_executable(
     name = "exe-exe",
     main = "main",
     visibility = ["//visibility:public"],
-    deps = [
-        ":main",
-        "//impl2:#Impl2",
-    ],
+    deps = ["//impl2:#Impl2"],
 )
 `
 

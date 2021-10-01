@@ -25,12 +25,6 @@ const duneFile = `(library
  (modules foo bar))
 `
 
-var defaultLibKind = LibSpec{
-  wrapped: true,
-  virtualModules: nil,
-  implements: "",
-}
-
 func TestDuneParse(t *testing.T) {
   sexp := parseDune(duneFile)
   output := decodeDuneConfig("test", sexp)
@@ -41,9 +35,8 @@ func TestDuneParse(t *testing.T) {
           public: "sub-lib",
       }},
       flags: []string{"-open", "Angstrom"},
-      auto: true,
     },
-    modules: AutoModules{},
+    modules: 0,
     libraries: []DuneLibDep{
       DuneLibOpam{"angstrom"},
       DuneLibOpam{"re"},
@@ -55,7 +48,12 @@ func TestDuneParse(t *testing.T) {
     },
     ppx: false,
     preprocess: nil,
-    kind: defaultLibKind,
+    kind: LibSpec{
+      name: ComponentName{"sub_lib", "sub-lib"},
+      wrapped: true,
+      virtualModules: nil,
+      implements: "",
+    },
   }
   target2 := DuneComponent{
     core: DuneComponentCore{
@@ -64,43 +62,54 @@ func TestDuneParse(t *testing.T) {
         public: "sub-extra-lib",
       }},
       flags: nil,
-      auto: false,
     },
-    modules: ConcreteModules{[]string{"foo", "bar"}},
+    modules: 1,
     libraries: nil,
     ppx: true,
     preprocess: []string{"ppx_inline_test"},
-    kind: defaultLibKind,
+    kind: LibSpec{
+      name: ComponentName{"sub_extra_lib", "sub-extra-lib"},
+      wrapped: true,
+      virtualModules: nil,
+      implements: "",
+    },
   }
+  conc := ConcreteModules{[]string{"foo", "bar"}}
   targets := []DuneComponent{target1, target2}
-  conf := DuneConfig{targets, nil}
+  mods := map[int]ModuleSpec{ 0: AutoModules{}, 1: conc }
+  conf := DuneConfig{targets, nil, mods}
   if !reflect.DeepEqual(output, conf) {
-    t.Fatalf("Dune library differs.\nOutput:\n%#v\nTarget:\n%#v", output, targets)
+    t.Fatalf("Dune library differs.\nOutput:\n%#v\nTarget:\n%#v", output, conf)
   }
 }
 
 func TestDuneAssignGenerated(t *testing.T) {
+  mods := map[int]ModuleSpec{
+    0: ConcreteModules{[]string{"lex1", "mod1"}},
+    1: AutoModules{},
+    2: ConcreteModules{[]string{"lex2", "mod2"}},
+  }
   comp1 := DuneComponent{
-    core: DuneComponentCore{names: []ComponentName{{name: "comp1", public: ""}}, auto: false},
-    modules: ConcreteModules{[]string{"lex1", "mod1"}},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp1", public: ""}}},
+    modules: 0,
   }
   comp2 := DuneComponent{
-    core: DuneComponentCore{names: []ComponentName{{name: "comp2", public: ""}}, auto: true},
-    modules: AutoModules{},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp2", public: ""}}},
+    modules: 1,
   }
   comp3 := DuneComponent{
-    core: DuneComponentCore{names: []ComponentName{{name: "comp3", public: ""}}, auto: false},
-    modules: ConcreteModules{[]string{"lex2", "mod2"}},
+    core: DuneComponentCore{names: []ComponentName{{name: "comp3", public: ""}}},
+    modules: 2,
   }
   comps := []DuneComponent{comp1, comp2, comp3}
   generated := []string{"lex1", "lex2", "lex3"}
-  conf := DuneConfig{comps, generated}
+  conf := DuneConfig{comps, generated, mods}
   spec := duneToSpec(conf)
   result := assignGenerated(spec)
-  target := map[string][]string {
-    "comp1": {"lex1"},
-    "comp2": {"lex3"},
-    "comp3": {"lex2"},
+  target := map[int][]string {
+    0: {"lex1"},
+    1: {"lex3"},
+    2: {"lex2"},
   }
   if !reflect.DeepEqual(result, target) {
     t.Fatalf("Generators weren't assigned correctly:\n\n%#v\n\n%#v", result, target)

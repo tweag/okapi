@@ -22,6 +22,19 @@ type ExcludeModules struct {
   modules []string
 }
 
+type SourcesSpec struct {
+  // `modules` in Dune lingo
+  modules ModuleSpec
+  // `select` in Dune lingo
+  choices []Source
+  ppx PpxKind
+  // `libraries` in Dune lingo
+  depsOpam []string
+  kind KindSpec
+  flags []string
+  mains []string
+}
+
 func (AutoModules) names() []string { return nil }
 func (spec ConcreteModules) names() []string { return spec.modules }
 func (ExcludeModules) names() []string { return nil }
@@ -39,12 +52,6 @@ type ComponentName struct {
   public string
 }
 
-type ComponentCore struct {
-  name ComponentName
-  flags []string
-  auto bool
-}
-
 // Whether it's an executable or library
 type KindSpec interface {
   toObazl(PpxKind, Deps) ComponentKind
@@ -52,6 +59,7 @@ type KindSpec interface {
 
 // LibSpec implements KindSpec
 type LibSpec struct {
+  name ComponentName
   wrapped bool
   virtualModules []string
   implements string
@@ -69,6 +77,7 @@ func (lib LibSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
     modules = append(modules, sources[mod])
   }
   return Library{
+    name: lib.name,
     virtualModules: modules,
     implements: lib.implements,
     kind: libKind(ppx.isPpx(), lib.wrapped),
@@ -87,19 +96,13 @@ func (spec ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
 
 // Executable | Library | Test
 type ComponentSpec struct {
-  core ComponentCore
-  // `modules` in Dune lingo
-  modules ModuleSpec
-  // `libraries` in Dune lingo
-  depsOpam []string
-  ppx PpxKind
-  choices []Source
-  kind KindSpec
+  name ComponentName
+  modules int
 }
 
 // Directory (or Dune file or Bazel build file)
 type PackageSpec struct {
   components []ComponentSpec
-  modules []ModuleSpec
+  modules map[int]SourcesSpec
   generated []string
 }

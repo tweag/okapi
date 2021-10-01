@@ -1,13 +1,12 @@
 package okapi
 
 import (
-  "log"
-  "path/filepath"
-  "regexp"
-  "strings"
+	"log"
+	"path/filepath"
+	"regexp"
+	"strings"
 
-  "github.com/bazelbuild/bazel-gazelle/language"
-  "github.com/bazelbuild/bazel-gazelle/rule"
+	"github.com/bazelbuild/bazel-gazelle/rule"
 )
 
 func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
@@ -16,25 +15,27 @@ func GenerateRulesAuto(name string, sources Deps, library bool) []RuleResult {
   var modules SourceSlice
   for _, key := range keys { modules = append(modules, sources[key]) }
   modules.Sort()
-  lib := Component{
-    core: ComponentCore{
-      name: ComponentName{
-        name: name,
-        public: name,
-      },
-      flags: nil,
-      auto: true,
-    },
-    modules: modules,
-    depsOpam: nil,
-    ppx: NoPpx{},
-    kind: Library{
+  srcSet := SourceSet{
+  	name: name,
+  	sources: modules,
+  	spec: AutoModules{},
+  	depsOpam: nil,
+  	ppx: NoPpx{},
+  	kind: Library{
       virtualModules: nil,
       implements: "",
       kind: LibNs{},
     },
+  	flags: nil,
   }
-  return component(sources, lib, library)
+  lib := Component{
+    name: ComponentName{
+      name: name,
+      public: name,
+    },
+    sources: &srcSet,
+  }
+  return append(sourceRules(srcSet), component(lib, library)...)
 }
 
 func GenerateRulesDune(name string, sources Deps, duneCode string, library bool) []RuleResult {
@@ -173,55 +174,52 @@ func removeColon(name string) string {
 // TODO general question about attrs like opts and deps_opam: is it more sensible to leave these nil when updating,
 // since they get merged anyway?
 // TODO `deps` is wrong, this needs to use `submodules` or `modules` (`kind.moduleAttr`)
-func existingLibrary(r *rule.Rule, sources Deps) (ComponentSpec, bool) {
-  if kind, isLib := libKinds[r.Name()]; isLib {
-    var moduleSpec ModuleSpec = AutoModules{}
-    if len(r.AttrStrings("deps")) > 0 {
-      var modules []string
-      for _, name := range r.AttrStrings("deps") {
-        clean := removeColon(name)
-        modules = append(modules, clean)
-        // if src, exists := sources[clean]; exists { modules = append(modules, src) }
-      }
-      moduleSpec = ConcreteModules{modules}
-    }
-    nameSlug := slug(r.Name())
-    publicName := ruleConfigOr(r, "public_name", nameSlug)
-    implements := ruleConfigOr(r, "implements", "")
-    var ppx PpxKind = NoPpx{}
-    if kind.ppx() { ppx = PpxTransitive{} }
-    lib := ComponentSpec{
-      core: ComponentCore{
-        name: ComponentName{
-          name: nameSlug,
-          public: publicName,
-        },
-        flags: nil,
-        auto: hasTag("auto", r),
-      },
-      modules: moduleSpec,
-      depsOpam: nil,
-      ppx: ppx,
-      kind: LibSpec{
-        wrapped: kind.wrapped(),
-        virtualModules: nil,
-        implements: implements,
-      },
-    }
-    return lib, true
-  }
-  return ComponentSpec{}, false
-}
+// TODO this needs to return the modules to be added to `PackageSpec` now
+// func existingLibrary(r *rule.Rule, i int, sources Deps) (ComponentSpec, bool) {
+//   if kind, isLib := libKinds[r.Name()]; isLib {
+//     var moduleSpec ModuleSpec = AutoModules{}
+//     if len(r.AttrStrings("deps")) > 0 {
+//       var modules []string
+//       for _, name := range r.AttrStrings("deps") {
+//         clean := removeColon(name)
+//         modules = append(modules, clean)
+//         // if src, exists := sources[clean]; exists { modules = append(modules, src) }
+//       }
+//       moduleSpec = ConcreteModules{modules}
+//     }
+//     nameSlug := slug(r.Name())
+//     publicName := ruleConfigOr(r, "public_name", nameSlug)
+//     implements := ruleConfigOr(r, "implements", "")
+//     var ppx PpxKind = NoPpx{}
+//     if kind.ppx() { ppx = PpxTransitive{} }
+//     lib := ComponentSpec{
+//       name: ComponentName{
+//         name: nameSlug,
+//         public: publicName,
+//       },
+//       modules: i,
+//       depsOpam: nil,
+//       ppx: ppx,
+//       kind: LibSpec{
+//         wrapped: kind.wrapped(),
+//         virtualModules: nil,
+//         implements: implements,
+//       },
+//     }
+//     return lib, true
+//   }
+//   return ComponentSpec{}, false
+// }
 
-func existingLibraries(rules []*rule.Rule, sources Deps) PackageSpec {
-  var libs []ComponentSpec
-  for _, r := range rules {
-    if lib, isLib := existingLibrary(r, sources); isLib { libs = append(libs, lib) }
-  }
-  return PackageSpec{libs, nil, nil}
-}
+// func existingLibraries(rules []*rule.Rule, sources Deps) PackageSpec {
+//   var libs []ComponentSpec
+//   for i, r := range rules {
+//     if lib, isLib := existingLibrary(r, i, sources); isLib { libs = append(libs, lib) }
+//   }
+//   return PackageSpec{libs, nil, nil}
+// }
 
-func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps, library bool) []RuleResult {
-  spec := existingLibraries(rules, sources)
-  return multilib(spec, sources, library)
-}
+// func AmendRules(args language.GenerateArgs, rules []*rule.Rule, sources Deps, library bool) []RuleResult {
+//   spec := existingLibraries(rules, sources)
+//   return multilib(spec, sources, library)
+// }

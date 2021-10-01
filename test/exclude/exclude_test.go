@@ -44,17 +44,17 @@ ocaml_module(
     struct = ":m4.ml",
 )
 
+ocaml_module(
+    name = "m1",
+    struct = ":m1.ml",
+)
+
 # okapi:auto
 # okapi:public_name lib1
 ocaml_ns_library(
     name = "#Lib1",
     submodules = [":m4"],
     visibility = ["//visibility:public"],
-)
-
-ocaml_module(
-    name = "m1",
-    struct = ":m1.ml",
 )
 
 # okapi:public_name lib2

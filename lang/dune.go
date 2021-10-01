@@ -15,13 +15,12 @@ type DuneLibSelect struct { Choice ModuleChoice }
 type DuneComponentCore struct {
   names []ComponentName
   flags []string
-  auto bool
 }
 
 // Either Executable Library
 type DuneComponent struct {
   core DuneComponentCore
-  modules ModuleSpec // TODO Probably aim to remove it (only store module names/keys/ids)
+  modules int
   libraries []DuneLibDep
   ppx bool
   preprocess []string
@@ -31,6 +30,7 @@ type DuneComponent struct {
 type DuneConfig struct {
   components []DuneComponent
   generated []string
+  modules map[int]ModuleSpec
 	// TODO add here the map[moduleKey]ModuleSpec here
 }
 
@@ -158,15 +158,18 @@ func duneModules(names []string) ModuleSpec {
   }
 }
 
-func duneComponentKind(lib SexpComponent) KindSpec {
+func duneLibraryKind(lib SexpComponent, name ComponentName) KindSpec {
   wrapped := lib.data.Values["wrapped"] != SexpString{"false"}
-  if lib.data.Name == "library" {
-    return LibSpec{
-      wrapped: wrapped,
-      virtualModules: lib.list("virtual_modules"),
-      implements: lib.stringOptional("implements"),
-    }
-  } else if lib.data.Name == "executable" || lib.data.Name == "executables" {
+  return LibSpec{
+    name: name,
+    wrapped: wrapped,
+    virtualModules: lib.list("virtual_modules"),
+    implements: lib.stringOptional("implements"),
+  }
+}
+
+func duneExeKind(lib SexpComponent) KindSpec {
+  if lib.data.Name == "executable" || lib.data.Name == "executables" {
     return ExeSpec{test: false}
   } else if lib.data.Name == "test" || lib.data.Name == "tests" {
     return ExeSpec{test: true}
@@ -174,38 +177,33 @@ func duneComponentKind(lib SexpComponent) KindSpec {
   return nil
 }
 
-func duneComponent(data SexpComponent, name string, publicName string, conf SexpMap) DuneComponent {
+func duneComponent(data SexpComponent, names []ComponentName, conf SexpMap, moduleIndex int, kind KindSpec) DuneComponent {
   preproc := dunePreprocessors(data)
-  modules := duneModules(data.list("modules"))
   return DuneComponent{
     core: DuneComponentCore{
-      names: []ComponentName{{
-        name: name,
-        public: publicName,
-      }},
+      names: names,
       flags: data.list("flags"),
-      auto: modules.auto(),
     },
-    modules: modules,
+    modules: moduleIndex,
     libraries: duneLibraryDeps(data),
     ppx: len(preproc) > 0,
     preprocess: preproc,
-    kind: duneComponentKind(data),
+    kind: kind,
   }
 }
 
-func duneExecutables(libName string, conf SexpMap) []DuneComponent {
-  var result []DuneComponent
+func duneExecutables(libName string, conf SexpMap, moduleIndex int) DuneComponent {
   data := SexpComponent{libName, conf}
   names := data.list("names")
   public := names
   if _, hasPublic := conf.Values["public_names"]; hasPublic {
     public = data.list("public_names")
   }
+  var cnames []ComponentName
   for i, name := range names {
-    result = append(result, duneComponent(data, name, public[i], conf))
+    cnames = append(cnames, ComponentName{name, public[i]})
   }
-  return result
+  return duneComponent(data, cnames, conf, moduleIndex, duneExeKind(data))
 }
 
 func generatedSources(conf SexpList) []string {
@@ -227,20 +225,28 @@ func generatedSources(conf SexpList) []string {
 func decodeDuneConfig(libName string, conf SexpList) DuneConfig {
   var components []DuneComponent
   generated := generatedSources(conf)
+  moduleIndex := 0
+  modules := make(map[int]ModuleSpec)
   for _, node := range conf.Sub {
     dune, isMap := node.(SexpMap)
     if isMap {
-      if dune.Name == "library" || dune.Name == "executable" {
-        data := SexpComponent{libName, dune}
+      data := SexpComponent{libName, dune}
+      modules[moduleIndex] = duneModules(data.list("modules"))
+      if dune.Name == "library" {
         name := data.string("name")
-        publicName := data.stringOr("public_name", name)
-        components = append(components, duneComponent(data, name, publicName, dune))
+        cname := ComponentName{name, data.stringOr("public_name", name)}
+        components = append(components, duneComponent(data, []ComponentName{cname}, dune, moduleIndex, duneLibraryKind(data, cname)))
+      } else if dune.Name == "executable" || dune.Name == "test" {
+        name := data.string("name")
+        cname := ComponentName{name, data.stringOr("public_name", name)}
+        components = append(components, duneComponent(data, []ComponentName{cname}, dune, moduleIndex, duneExeKind(data)))
       } else if dune.Name == "executables" || dune.Name == "tests" {
-        components = append(components, duneExecutables(libName, dune)...)
+        components = append(components, duneExecutables(libName, dune, moduleIndex))
       }
+      moduleIndex += 1
     }
   }
-  return DuneConfig{components, generated}
+  return DuneConfig{components, generated, modules}
 }
 
 func contains(target string, items []string) bool {
@@ -313,19 +319,18 @@ func libKind(ppx bool, wrapped bool) LibraryKind {
 // Assign modules generated by ocamllex etc. to the appropriate component.
 // If the module is listed explicitly in a (modules) stanza, use that one.
 // Otherwise, use the auto library/executable.
-// TODO this breaks for executables with the (names) stanza, it will only assign the source to one of them
-func assignGenerated(spec PackageSpec) map[string][]string {
-  byGen := make(map[string]string)
-  result := make(map[string][]string)
+func assignGenerated(spec PackageSpec) map[int][]string {
+  byGen := make(map[string]int)
+  result := make(map[int][]string)
   var gens []string
   for _, gen := range spec.generated { gens = append(gens, gen) }
   for _, gen := range gens {
-    for _, com := range spec.components {
+    for i, srcSpec := range spec.modules {
       _, exists := byGen[gen]
-      if com.core.auto {
-        if !exists { byGen[gen] = com.core.name.name }
+      if srcSpec.modules.auto() {
+        if !exists { byGen[gen] = i }
       } else {
-        if com.modules.specifies(gen) { byGen[gen] = com.core.name.name }
+        if srcSpec.modules.specifies(gen) { byGen[gen] = i }
       }
     }
   }
@@ -371,44 +376,44 @@ func moduleSources(names []string, sources Deps, choices []Source) []Source {
   return final
 }
 
-func duneCoreToSpec(dune DuneComponentCore) []ComponentCore {
-  var cores []ComponentCore
-  for _, name := range dune.names {
-    cores = append(cores, ComponentCore{
-      name: name,
-      flags: dune.flags,
-      auto: dune.auto,
-    })
-  }
-  return cores
-}
-
-func duneComponentToSpec(dune DuneComponent) []ComponentSpec {
+func duneComponentToSpec(dune DuneComponent, modules ModuleSpec) ([]ComponentSpec, SourcesSpec) {
   ppx := dunePpx(dune.preprocess)
   choices := duneChoices(dune.libraries)
-  moduleNames := modulesWithSelectOutputs(dune.modules, dune.libraries)
+  fullModules := modulesWithSelectOutputs(modules, dune.libraries)
+  _, isExe := dune.kind.(ExeSpec)
   var result []ComponentSpec
-  for _, core := range duneCoreToSpec(dune.core) {
+  var mains []string
+  for _, name := range dune.core.names {
     result = append(result, ComponentSpec{
-      core: core,
-      modules: moduleNames,
-      depsOpam: opamDeps(dune.libraries),
-      ppx: ppx,
-      choices: choices,
-      kind: dune.kind,
+      name: name,
+      modules: dune.modules,
     })
+    if isExe { mains = append(mains, name.name) }
   }
-  return result
+  return result, SourcesSpec{
+  	modules: fullModules,
+  	choices: choices,
+  	ppx: ppx,
+    depsOpam: opamDeps(dune.libraries),
+    kind: dune.kind,
+  	flags: dune.core.flags,
+    mains: mains,
+  }
 }
 
 func duneToSpec(config DuneConfig) PackageSpec {
   var components []ComponentSpec
+  modules := make(map[int]SourcesSpec)
   for _, comp := range config.components {
-    components = append(components, duneComponentToSpec(comp)...)
+    compModules := config.modules[comp.modules]
+    comps, fullModules := duneComponentToSpec(comp, compModules)
+    components = append(components, comps...)
+    modules[comp.modules] = fullModules
   }
   return PackageSpec{
     components: components,
     generated: config.generated,
+    modules: modules,
   }
 }
 

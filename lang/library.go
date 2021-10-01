@@ -370,7 +370,18 @@ func multilib(spec PackageSpec, sources Deps, library bool) []RuleResult {
   components := specComponents(spec, sources)
   var rules []RuleResult
   for _, comp := range components {
-    rules = append(rules, component(sources, comp, library)...)
+		rulesToAdd := component(sources, comp, library)
+		// Don't add it if it's already there (e.g. because of multiple executables depending on the same modules)
+		newRuleLabel:
+		for _, newRule := range rulesToAdd {
+			for _, existingRule := range rules {
+				if newRule.rule.Name() == existingRule.rule.Name() && newRule.rule.Kind() == existingRule.rule.Kind() {
+					// Rule already contained in the existing one: moving on instead of duplicating
+          continue newRuleLabel
+				}
+			}
+			rules = append(rules, newRule)
+		}
   }
   return rules
 }

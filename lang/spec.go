@@ -1,6 +1,6 @@
 package okapi
 
-// A `modules` stanza (may be absent, in that case auto = true)
+// A `modules` stanza (may be absent, in that case `auto = true`)
 type ModuleSpec interface {
   names() []string
   specifies(mod string) bool
@@ -45,6 +45,7 @@ type ComponentCore struct {
   auto bool
 }
 
+// Whether it's an executable or library
 type KindSpec interface {
   toObazl(PpxKind, Deps) ComponentKind
 }
@@ -84,7 +85,9 @@ func (ExeSpec) toObazl(ppx PpxKind, sources Deps) ComponentKind {
 // Executable | Library | Test
 type ComponentSpec struct {
   core ComponentCore
-  modules ModuleSpec // Could only be module names ([]string) and let PackageSpec store the module data
+	// `modules` in Dune lingo
+  modules ModuleSpec
+	// `libraries` in Dune lingo
   depsOpam []string
   ppx PpxKind
   choices []Source

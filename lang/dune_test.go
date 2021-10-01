@@ -108,5 +108,27 @@ func TestDuneAssignGenerated(t *testing.T) {
 }
 
 func TestDuneExecutables(t *testing.T) {
-  
+	const duneFile = `
+    (executables
+      (names Executable1 Executable2)
+      (modules Module1 Module2)
+      (libraries library1 library2)
+    )
+    `
+  sexp := parseDune(duneFile)
+  duneConfig := decodeDuneConfig("test", sexp)
+	spec := duneToSpec(duneConfig)
+	deps := make(map[string]Source)
+	deps["Module1"] = Source {name: "foo", intf: false, virtual: false, deps: []string{}, generator: NoGenerator{}}
+	deps["Module2"] = Source {name: "bar", intf: false, virtual: false, deps: []string{}, generator: NoGenerator{}}
+	results := multilib(spec, deps, false)
+	if len(results) != 4 {
+		t.Logf("Incorrect number of rules generated!")
+		t.Logf("Expected 4 rules (2 x 1 per module + 2 x 1 per executable).")
+		t.Logf("Instead got %v", len(results))
+		for _, result := range results {
+			t.Logf("%v (kind: %v)", result.rule.Name(), result.rule.Kind())
+		}
+		t.FailNow()
+	}
 }

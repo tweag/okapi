@@ -10,9 +10,9 @@ ocaml_module(
 )
 
 # okapi:auto
-# okapi:public_name exe
+# okapi:public_name main_public_name
 ocaml_executable(
-    name = "exe-exe",
+    name = "exe-main_public_name",
     main = "main",
     visibility = ["//visibility:public"],
     deps = ["@okapi-test//impl:#Impl"],

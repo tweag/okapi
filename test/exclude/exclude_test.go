@@ -1,16 +1,16 @@
 package no_sig_test
 
 import (
-  "io/ioutil"
-  "path/filepath"
-  "strings"
-  "testing"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
+	"testing"
 
-  "github.com/bazelbuild/rules_go/go/tools/bazel_testing"
+	"github.com/bazelbuild/rules_go/go/tools/bazel_testing"
 )
 
 var testArgs = bazel_testing.Args{
-  Main: `
+	Main: `
 -- BUILD.bazel --
 load("@okapi//bzl:generate.bzl", "generate")
 generate()
@@ -28,7 +28,7 @@ generate()
   (modules m1)
 )
 `,
-  WorkspaceSuffix: `
+	WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 load("@okapi//bzl:setup.bzl", "okapi_setup_legacy")
@@ -44,17 +44,17 @@ ocaml_module(
     struct = ":m4.ml",
 )
 
+ocaml_module(
+    name = "m1",
+    struct = ":m1.ml",
+)
+
 # okapi:auto
 # okapi:public_name lib1
 ocaml_ns_library(
     name = "#Lib1",
     submodules = [":m4"],
     visibility = ["//visibility:public"],
-)
-
-ocaml_module(
-    name = "m1",
-    struct = ":m1.ml",
 )
 
 # okapi:public_name lib2
@@ -65,33 +65,35 @@ ocaml_ns_library(
 )
 `
 
-func checkFile(t *testing.T, ws string, target string, path... string) {
-  trimmedTarget := strings.TrimSpace(target)
-  rel := filepath.Join(path...)
-  file := filepath.Join(strings.TrimSpace(ws), rel)
-  bytes, err1 := ioutil.ReadFile(file)
-  if err1 != nil { t.Fatal(err1) }
-  content := strings.TrimSpace(string(bytes))
-  if content != trimmedTarget {
-    t.Fatal(rel + " doesn't match:\n\n" + content + "\n\n------------------- target:\n\n" + trimmedTarget)
-  }
+func checkFile(t *testing.T, ws string, target string, path ...string) {
+	trimmedTarget := strings.TrimSpace(target)
+	rel := filepath.Join(path...)
+	file := filepath.Join(strings.TrimSpace(ws), rel)
+	bytes, err1 := ioutil.ReadFile(file)
+	if err1 != nil {
+		t.Fatal(err1)
+	}
+	content := strings.TrimSpace(string(bytes))
+	if content != trimmedTarget {
+		t.Fatal(rel + " doesn't match:\n\n" + content + "\n\n------------------- target:\n\n" + trimmedTarget)
+	}
 }
 
-func run(t *testing.T, cmd... string) string {
-  if output, err := bazel_testing.BazelOutput(cmd...); err != nil {
-    t.Fatal(err)
-    return ""
-  } else {
-    return string(output)
-  }
+func run(t *testing.T, cmd ...string) string {
+	if output, err := bazel_testing.BazelOutput(cmd...); err != nil {
+		t.Fatal(err)
+		return ""
+	} else {
+		return string(output)
+	}
 }
 
 func TestVirtual(t *testing.T) {
-  ws := run(t, "info", "workspace")
-  run(t, "run", "//:gazelle", "--", "--library")
-  checkFile(t, ws, libBuildTarget, "lib", "BUILD.bazel")
+	ws := run(t, "info", "workspace")
+	run(t, "run", "//:gazelle", "--", "--library")
+	checkFile(t, ws, libBuildTarget, "lib", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) {
-  bazel_testing.TestMain(m, testArgs)
+	bazel_testing.TestMain(m, testArgs)
 }

@@ -1,16 +1,16 @@
 package basic_test
 
 import (
-  "io/ioutil"
-  "path/filepath"
-  "strings"
-  "testing"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
+	"testing"
 
-  "github.com/bazelbuild/rules_go/go/tools/bazel_testing"
+	"github.com/bazelbuild/rules_go/go/tools/bazel_testing"
 )
 
 var testArgs = bazel_testing.Args{
-  Main: `
+	Main: `
 -- BUILD.bazel --
 load("@okapi//bzl:generate.bzl", "generate")
 
@@ -76,7 +76,7 @@ module Sub = struct
   let sub a = a
 end
 `,
-  WorkspaceSuffix: `
+	WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 
@@ -136,7 +136,7 @@ ocaml_ns_library(
 const subBuildTarget = `load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ppx_executable", "ppx_module", "ppx_ns_library")
 
 ppx_executable(
-    name = "ppx_sub_lib",
+    name = "ppx_set-0",
     deps_opam = ["ppx_inline_test"],
     main = "@obazl_rules_ocaml//dsl:ppx_driver",
 )
@@ -153,7 +153,7 @@ ppx_module(
         "-open",
         "Angstrom",
     ],
-    ppx = ":ppx_sub_lib",
+    ppx = ":ppx_set-0",
     ppx_print = "@ppx//print:text",
     ppx_tags = ["inline-test"],
     struct = ":final.ml",
@@ -171,21 +171,10 @@ ppx_module(
         "-open",
         "Angstrom",
     ],
-    ppx = ":ppx_sub_lib",
+    ppx = ":ppx_set-0",
     ppx_print = "@ppx//print:text",
     ppx_tags = ["inline-test"],
     struct = ":sub.ml",
-)
-
-# okapi:auto
-# okapi:public_name sub-lib
-ppx_ns_library(
-    name = "#Sub_lib",
-    submodules = [
-        ":final",
-        ":sub",
-    ],
-    visibility = ["//visibility:public"],
 )
 
 ocaml_module(
@@ -212,26 +201,45 @@ ocaml_ns_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+# okapi:auto
+# okapi:public_name sub-lib
+ppx_ns_library(
+    name = "#Sub_lib",
+    submodules = [
+        ":final",
+        ":sub",
+    ],
+    visibility = ["//visibility:public"],
+)
 `
 
-func checkFile(t *testing.T, ws string, target string, path... string) {
-  rel := filepath.Join(path...)
-  file := filepath.Join(strings.TrimSpace(ws), rel)
-  bytes, err1 := ioutil.ReadFile(file)
-  if err1 != nil { t.Fatal(err1) }
-  content := string(bytes)
-  if content != target { t.Fatal(rel + " doesn't match:\n" + content) }
+func checkFile(t *testing.T, ws string, target string, path ...string) {
+	rel := filepath.Join(path...)
+	file := filepath.Join(strings.TrimSpace(ws), rel)
+	bytes, err1 := ioutil.ReadFile(file)
+	if err1 != nil {
+		t.Fatal(err1)
+	}
+	content := string(bytes)
+	if content != target {
+		t.Fatal(rel + " doesn't match:\n" + content)
+	}
 }
 
 func TestBuild(t *testing.T) {
-  if err := bazel_testing.RunBazel("run", "//:gazelle", "--", "--library"); err != nil { t.Fatal(err) }
-  output, err := bazel_testing.BazelOutput("info", "workspace")
-  ws := string(output[:])
-  if err != nil { t.Fatal(err) }
-  checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
-  checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
+	if err := bazel_testing.RunBazel("run", "//:gazelle", "--", "--library"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := bazel_testing.BazelOutput("info", "workspace")
+	ws := string(output[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
+	checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) {
-  bazel_testing.TestMain(m, testArgs)
+	bazel_testing.TestMain(m, testArgs)
 }

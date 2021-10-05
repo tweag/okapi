@@ -1,5 +1,5 @@
 (executable
  (name main)
- (public_name exe)
+ (public_name main_public_name)
  (libraries dep impl)
   )

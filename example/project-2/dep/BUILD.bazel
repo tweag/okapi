@@ -1,14 +1,14 @@
 load("@obazl_rules_ocaml//ocaml:rules.bzl", "ocaml_module", "ocaml_ns_library", "ocaml_signature")
 
 ocaml_signature(
-    name = "deppy_sig",
+    name = "deppy__sig",
     src = ":deppy.mli",
     deps = ["@okapi-test//virt:#Virt"],
 )
 
 ocaml_module(
     name = "deppy",
-    sig = ":deppy_sig",
+    sig = ":deppy__sig",
     struct = ":deppy.ml",
     deps = ["@okapi-test//virt:#Virt"],
 )

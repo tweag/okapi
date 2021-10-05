@@ -69,7 +69,7 @@ func (s SourceSlice) Sort()              { sort.Sort(s) }
 
 type Deps = map[string]Source
 
-func depName(file string) string {
+func extractDependencyname(file string) string {
 	return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 }
 
@@ -107,7 +107,7 @@ func prepareSources(dir string, files []string) map[string]CodeptSource {
 	for _, file := range files {
 		path := filepath.Join(dir, file)
 		ext := filepath.Ext(file)
-		name := depName(file)
+		name := extractDependencyname(file)
 		if ext == ".ml" || ext == ".mli" {
 			result[file] = CodeptSource{
 				name:       name,
@@ -146,7 +146,7 @@ func consDeps(dir string, codept Codept, codeptSources map[string]CodeptSource) 
 		if src == "" {
 			src = loc.Mli
 		}
-		local[modulePath(loc.Module)] = depName(src)
+		local[modulePath(loc.Module)] = extractDependencyname(src)
 	}
 	for _, src := range codept.Dependencies {
 		if filepath.Dir(src.File) == dir {
@@ -157,7 +157,7 @@ func consDeps(dir string, codept Codept, codeptSources map[string]CodeptSource) 
 					deps = append(deps, dep)
 				}
 			}
-			name := depName(src.File)
+			name := extractDependencyname(src.File)
 			if filepath.Ext(src.File) == ".mli" {
 				intfs[name] = deps
 			} else {

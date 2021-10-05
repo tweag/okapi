@@ -188,7 +188,8 @@ func removeColon(name string) string {
 	}
 }
 
-// TODO this uses only the `deps` names that correspond to existing source files.
+// TODO See https://github.com/tweag/okapi/issues/9
+// This uses only the `deps` names that correspond to existing source files.
 // It should also consider generated sources, like from selects and manual rules.
 // Probably needs to scan existing module rules as well.
 // TODO general question about attrs like opts and deps_opam: is it more sensible to leave these nil when updating,

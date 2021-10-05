@@ -36,7 +36,7 @@ func TestDuneParse(t *testing.T) {
 			}},
 			flags: []string{"-open", "Angstrom"},
 		},
-		modules: 0,
+		modulesIndex: 0,
 		libraries: []DuneLibDep{
 			DuneLibOpam{"angstrom"},
 			DuneLibOpam{"re"},
@@ -63,10 +63,10 @@ func TestDuneParse(t *testing.T) {
 			}},
 			flags: nil,
 		},
-		modules:    1,
-		libraries:  nil,
-		ppx:        true,
-		preprocess: []string{"ppx_inline_test"},
+		modulesIndex: 1,
+		libraries:    nil,
+		ppx:          true,
+		preprocess:   []string{"ppx_inline_test"},
 		kind: LibSpec{
 			name:           ComponentName{"sub_extra_lib", "sub-extra-lib"},
 			wrapped:        true,
@@ -90,16 +90,16 @@ func TestDuneAssignGenerated(t *testing.T) {
 		2: ConcreteModules{[]string{"lex2", "mod2"}},
 	}
 	comp1 := DuneComponent{
-		core:    DuneComponentCore{names: []ComponentName{{name: "comp1", public: ""}}},
-		modules: 0,
+		core:         DuneComponentCore{names: []ComponentName{{name: "comp1", public: ""}}},
+		modulesIndex: 0,
 	}
 	comp2 := DuneComponent{
-		core:    DuneComponentCore{names: []ComponentName{{name: "comp2", public: ""}}},
-		modules: 1,
+		core:         DuneComponentCore{names: []ComponentName{{name: "comp2", public: ""}}},
+		modulesIndex: 1,
 	}
 	comp3 := DuneComponent{
-		core:    DuneComponentCore{names: []ComponentName{{name: "comp3", public: ""}}},
-		modules: 2,
+		core:         DuneComponentCore{names: []ComponentName{{name: "comp3", public: ""}}},
+		modulesIndex: 2,
 	}
 	comps := []DuneComponent{comp1, comp2, comp3}
 	generated := []string{"lex1", "lex2", "lex3"}

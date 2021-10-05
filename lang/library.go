@@ -424,7 +424,7 @@ func libChoices(sets map[int]SourceSet) map[string]bool {
 		for _, mod := range set.sources {
 			if c, isChoice := mod.generator.(Choice); isChoice {
 				for _, a := range c.alts {
-					result[depName(a.choice)] = true
+					result[extractDependencyname(a.choice)] = true
 				}
 			}
 		}

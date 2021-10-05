@@ -1,16 +1,16 @@
 package basic_test
 
 import (
-  "io/ioutil"
-  "path/filepath"
-  "strings"
-  "testing"
+	"io/ioutil"
+	"path/filepath"
+	"strings"
+	"testing"
 
-  "github.com/bazelbuild/rules_go/go/tools/bazel_testing"
+	"github.com/bazelbuild/rules_go/go/tools/bazel_testing"
 )
 
 var testArgs = bazel_testing.Args{
-  Main: `
+	Main: `
 -- BUILD.bazel --
 load("@okapi//bzl:generate.bzl", "generate")
 
@@ -76,7 +76,7 @@ module Sub = struct
   let sub a = a
 end
 `,
-  WorkspaceSuffix: `
+	WorkspaceSuffix: `
 load("@okapi//bzl:deps.bzl", "okapi_deps")
 okapi_deps()
 
@@ -214,24 +214,32 @@ ppx_ns_library(
 )
 `
 
-func checkFile(t *testing.T, ws string, target string, path... string) {
-  rel := filepath.Join(path...)
-  file := filepath.Join(strings.TrimSpace(ws), rel)
-  bytes, err1 := ioutil.ReadFile(file)
-  if err1 != nil { t.Fatal(err1) }
-  content := string(bytes)
-  if content != target { t.Fatal(rel + " doesn't match:\n" + content) }
+func checkFile(t *testing.T, ws string, target string, path ...string) {
+	rel := filepath.Join(path...)
+	file := filepath.Join(strings.TrimSpace(ws), rel)
+	bytes, err1 := ioutil.ReadFile(file)
+	if err1 != nil {
+		t.Fatal(err1)
+	}
+	content := string(bytes)
+	if content != target {
+		t.Fatal(rel + " doesn't match:\n" + content)
+	}
 }
 
 func TestBuild(t *testing.T) {
-  if err := bazel_testing.RunBazel("run", "//:gazelle", "--", "--library"); err != nil { t.Fatal(err) }
-  output, err := bazel_testing.BazelOutput("info", "workspace")
-  ws := string(output[:])
-  if err != nil { t.Fatal(err) }
-  checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
-  checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
+	if err := bazel_testing.RunBazel("run", "//:gazelle", "--", "--library"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := bazel_testing.BazelOutput("info", "workspace")
+	ws := string(output[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkFile(t, ws, aBuildTarget, "a", "BUILD.bazel")
+	checkFile(t, ws, subBuildTarget, "a", "sub", "BUILD.bazel")
 }
 
 func TestMain(m *testing.M) {
-  bazel_testing.TestMain(m, testArgs)
+	bazel_testing.TestMain(m, testArgs)
 }
